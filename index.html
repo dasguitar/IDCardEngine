@@ -1,0 +1,771 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ID Card Design & Printing Engine - Dashboard Demo</title>
+  <link rel="stylesheet" href="id-card-engine.css">
+  <style>
+    /* Demo Page Dashboard Styling */
+    body {
+      margin: 0;
+      padding: 0;
+      background-color: #0b0f19;
+      color: #f8fafc;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    header {
+      background-color: #0f172a;
+      border-bottom: 1px solid #1e293b;
+      padding: 20px 40px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .header-logo {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .header-logo svg {
+      width: 32px;
+      height: 32px;
+      color: #3b82f6;
+    }
+
+    .header-logo h1 {
+      font-size: 1.5rem;
+      margin: 0;
+      font-weight: 700;
+      background: linear-gradient(to right, #3b82f6, #10b981);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .badge {
+      background-color: rgba(59, 130, 246, 0.1);
+      color: #3b82f6;
+      font-size: 0.75rem;
+      padding: 4px 10px;
+      border-radius: 20px;
+      border: 1px solid rgba(59, 130, 246, 0.2);
+      font-weight: 600;
+    }
+
+    main {
+      flex: 1;
+      padding: 30px;
+      display: grid;
+      grid-template-columns: 320px 1fr;
+      gap: 30px;
+      max-width: 1600px;
+      margin: 0 auto;
+      width: 100%;
+      box-sizing: border-box;
+    }
+
+    @media (max-width: 1200px) {
+      main {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    /* Database Form Panel */
+    .db-panel {
+      background-color: #111827;
+      border: 1px solid #1e293b;
+      border-radius: 16px;
+      padding: 20px;
+      box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);
+      height: fit-content;
+    }
+
+    .db-panel-title {
+      font-size: 1.1rem;
+      font-weight: 600;
+      margin: 0 0 16px 0;
+      color: #3b82f6;
+      border-bottom: 1px solid #1e293b;
+      padding-bottom: 10px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .db-form {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .db-input-group {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .db-label {
+      font-size: 0.75rem;
+      font-weight: 500;
+      color: #94a3b8;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .db-input, .db-select {
+      background-color: #1f2937;
+      border: 1px solid #374151;
+      border-radius: 8px;
+      color: #f8fafc;
+      padding: 8px 12px;
+      font-size: 0.875rem;
+      outline: none;
+      transition: all 0.2s ease;
+    }
+
+    .db-input:focus, .db-select:focus {
+      border-color: #3b82f6;
+      box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.15);
+    }
+
+    .db-file-btn {
+      background-color: #374151;
+      color: #f8fafc;
+      border: none;
+      border-radius: 8px;
+      padding: 8px;
+      font-size: 0.8125rem;
+      cursor: pointer;
+      text-align: center;
+      display: block;
+      margin-top: 4px;
+      transition: background-color 0.2s ease;
+    }
+
+    .db-file-btn:hover {
+      background-color: #4b5563;
+    }
+
+    /* Workspace Content Area */
+    .workspace-area {
+      display: flex;
+      flex-direction: column;
+      gap: 30px;
+    }
+
+    /* Logs Terminal Section */
+    .logs-panel {
+      background-color: #020617;
+      border: 1px solid #1e293b;
+      border-radius: 16px;
+      padding: 20px;
+      font-family: 'Courier New', Courier, monospace;
+      box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);
+    }
+
+    .logs-panel-title {
+      font-size: 0.95rem;
+      font-weight: 600;
+      margin: 0 0 10px 0;
+      color: #10b981;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .logs-content {
+      background-color: #090d16;
+      border-radius: 8px;
+      padding: 12px;
+      height: 140px;
+      overflow-y: auto;
+      font-size: 0.8125rem;
+      color: #34d399;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .log-line {
+      margin: 0;
+      line-height: 1.4;
+      border-bottom: 1px dashed rgba(52, 211, 153, 0.05);
+      padding-bottom: 4px;
+    }
+
+    .log-time {
+      color: #60a5fa;
+    }
+
+    .log-keyword {
+      color: #f43f5e;
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div class="header-logo">
+      <svg fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12c0 1.268-.63 2.39-1.593 3.068a3.745 3.745 0 0 1-1.043 3.296 3.745 3.745 0 0 1-3.296 1.043A3.745 3.745 0 0 1 12 21c-1.268 0-2.39-.63-3.068-1.593a3.746 3.746 0 0 1-3.296-1.043 3.745 3.745 0 0 1-1.043-3.296A3.745 3.745 0 0 1 3 12c0-1.268.63-2.39 1.593-3.068a3.745 3.745 0 0 1 1.043-3.296 3.746 3.746 0 0 1 3.296-1.043A3.746 3.746 0 0 1 12 3c1.268 0 2.39.63 3.068 1.593a3.746 3.746 0 0 1 3.296 1.043 3.746 3.746 0 0 1 1.043 3.296A3.745 3.745 0 0 1 21 12Z" />
+      </svg>
+      <h1>IDCardEngine</h1>
+      <span class="badge">v1.0.0 Stable</span>
+    </div>
+    <div style="font-size: 0.875rem; color: #94a3b8;">
+      Pure Vanilla JS & CSS ID Card Designer
+    </div>
+  </header>
+
+  <main>
+    <!-- Left panel: Simulated Cardholder Database form -->
+    <div class="db-panel">
+      <h3 class="db-panel-title">
+        <svg style="width: 18px; height: 18px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M20.25 6.375c0 2.278-3.694 4.125-8.25 4.125S3.75 8.653 3.75 6.375m16.5 0c0-2.278-3.694-4.125-8.25-4.125S3.75 4.097 3.75 6.375m16.5 0v11.25c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125V6.375m16.5 0v3.75m-16.5-3.75v3.75m16.5 0v3.75C20.25 16.153 16.556 18 12 18s-8.25-1.847-8.25-4.125v-3.75m16.5 0v3.75" />
+        </svg>
+        Simulated Database
+      </h3>
+      <div class="db-form" id="db-form-container">
+        <!-- Loaded dynamically by designer side hooks -->
+      </div>
+    </div>
+
+    <!-- Center/Right: Designer container & console logs -->
+    <div class="workspace-area">
+      <!-- Target Container for IDCardEngine -->
+      <div id="id-designer-container"></div>
+
+      <!-- Live logs console panel -->
+      <div class="logs-panel">
+        <h4 class="logs-panel-title">
+          <span>Engine Output Console</span>
+          <button class="db-file-btn" style="padding: 2px 8px; margin: 0; font-size: 0.7rem;" onclick="document.getElementById('logs-container').innerHTML = '';">Clear</button>
+        </h4>
+        <div class="logs-content" id="logs-container">
+          <p class="log-line"><span class="log-time">[17:47:00]</span> Engine console initialized. Waiting for actions...</p>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <script src="id-card-engine.js"></script>
+  <script>
+    // Create base64 SVGs to use as premium templates backgrounds so no static image assets are needed
+    const createPremiumPortraitBG = (type) => {
+      let innerHTML = '';
+      if (type === 'blue_gold') {
+        innerHTML = `
+          <defs>
+            <linearGradient id="gold-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stop-color="#bf953f"/>
+              <stop offset="25%" stop-color="#fcf6ba"/>
+              <stop offset="50%" stop-color="#b38728"/>
+              <stop offset="75%" stop-color="#fbf5b7"/>
+              <stop offset="100%" stop-color="#aa771c"/>
+            </linearGradient>
+            <linearGradient id="navy-grad" x1="0%" y1="0%" x2="100%" y2="0%">
+              <stop offset="0%" stop-color="#1e3a8a"/>
+              <stop offset="100%" stop-color="#0f172a"/>
+            </linearGradient>
+            <linearGradient id="slate-grad" x1="0%" y1="100%" x2="100%" y2="0%">
+              <stop offset="0%" stop-color="#0f172a"/>
+              <stop offset="100%" stop-color="#1e293b"/>
+            </linearGradient>
+            <linearGradient id="center-grad" x1="0%" y1="0%" x2="0%" y2="100%">
+              <stop offset="0%" stop-color="#f8fafc"/>
+              <stop offset="100%" stop-color="#e2e8f0"/>
+            </linearGradient>
+            <pattern id="dots" width="10" height="10" patternUnits="userSpaceOnUse">
+              <circle cx="1.5" cy="1.5" r="0.75" fill="#94a3b8" opacity="0.15"/>
+            </pattern>
+          </defs>
+          <rect width="100%" height="100%" fill="url(#center-grad)"/>
+          <rect width="100%" height="100%" fill="url(#dots)"/>
+          <path d="M -5,-5 L 323,-5 L 323,100 L -5,140 Z" fill="url(#navy-grad)"/>
+          <path d="M -5,-5 L 220,-5 L -5,110 Z" fill="#2563eb" opacity="0.15"/>
+          <path d="M 120,-5 L 323,-5 L 323,70 Z" fill="#3b82f6" opacity="0.2"/>
+          <path d="M -5,141 L 323,101 L 323,105 L -5,145 Z" fill="#000000" opacity="0.25"/>
+          <path d="M -5,140 L 323,100 L 323,103 L -5,143 Z" fill="url(#gold-grad)"/>
+          <path d="M -5,440 L 323,410 L 323,509 L -5,509 Z" fill="url(#slate-grad)"/>
+          <path d="M -5,440 L 323,410 L 323,413 L -5,443 Z" fill="url(#gold-grad)"/>
+          <path d="M 80,509 L 323,470 L 323,509 Z" fill="#2563eb" opacity="0.2"/>
+        `;
+      } else if (type === 'orange_silver') {
+        innerHTML = `
+          <defs>
+            <linearGradient id="silver-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stop-color="#ffffff"/>
+              <stop offset="30%" stop-color="#cbd5e1"/>
+              <stop offset="50%" stop-color="#94a3b8"/>
+              <stop offset="70%" stop-color="#e2e8f0"/>
+              <stop offset="100%" stop-color="#475569"/>
+            </linearGradient>
+            <linearGradient id="amber-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stop-color="#ea580c"/>
+              <stop offset="100%" stop-color="#7c2d12"/>
+            </linearGradient>
+            <linearGradient id="charcoal-grad" x1="0%" y1="0%" x2="0%" y2="100%">
+              <stop offset="0%" stop-color="#1e293b"/>
+              <stop offset="100%" stop-color="#0f172a"/>
+            </linearGradient>
+            <linearGradient id="center-grad-2" x1="0%" y1="0%" x2="0%" y2="100%">
+              <stop offset="0%" stop-color="#fafafa"/>
+              <stop offset="100%" stop-color="#f4f4f5"/>
+            </linearGradient>
+            <pattern id="lines" width="12" height="12" patternTransform="rotate(45)" patternUnits="userSpaceOnUse">
+              <line x1="0" y1="0" x2="0" y2="12" stroke="#cbd5e1" stroke-width="0.75" opacity="0.25"/>
+            </pattern>
+          </defs>
+          <rect width="100%" height="100%" fill="url(#center-grad-2)"/>
+          <rect width="100%" height="100%" fill="url(#lines)"/>
+          <path d="M -5,-5 L 110,-5 L 45,509 L -5,509 Z" fill="url(#charcoal-grad)"/>
+          <path d="M -5,-5 L 70,-5 L -5,320 Z" fill="url(#amber-grad)" opacity="0.7"/>
+          <path d="M -5,220 L 50,180 L -5,509 Z" fill="#475569" opacity="0.3"/>
+          <path d="M 110,-5 L 113,-5 L 48,509 L 45,509 Z" fill="url(#silver-grad)"/>
+          <path d="M 190,-5 L 323,-5 L 323,90 Z" fill="url(#amber-grad)"/>
+          <path d="M 187,-5 L 190,-5 L 323,87 L 323,90 Z" fill="url(#silver-grad)"/>
+        `;
+      } else if (type === 'teal_titanium') {
+        innerHTML = `
+          <defs>
+            <linearGradient id="titanium-grad" x1="0%" y1="100%" x2="100%" y2="0%">
+              <stop offset="0%" stop-color="#475569"/>
+              <stop offset="30%" stop-color="#94a3b8"/>
+              <stop offset="50%" stop-color="#cbd5e1"/>
+              <stop offset="70%" stop-color="#64748b"/>
+              <stop offset="100%" stop-color="#1e293b"/>
+            </linearGradient>
+            <linearGradient id="teal-grad" x1="0%" y1="0%" x2="100%" y2="0%">
+              <stop offset="0%" stop-color="#0d9488"/>
+              <stop offset="100%" stop-color="#115e59"/>
+            </linearGradient>
+            <linearGradient id="slate-grad-3" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stop-color="#0f172a"/>
+              <stop offset="100%" stop-color="#1e293b"/>
+            </linearGradient>
+            <linearGradient id="center-grad-3" x1="0%" y1="0%" x2="0%" y2="100%">
+              <stop offset="0%" stop-color="#f0fdfa"/>
+              <stop offset="100%" stop-color="#f5f5f4"/>
+            </linearGradient>
+            <pattern id="curves" width="40" height="40" patternUnits="userSpaceOnUse">
+              <circle cx="0" cy="0" r="36" fill="none" stroke="#0d9488" stroke-width="0.5" opacity="0.1"/>
+              <circle cx="0" cy="0" r="28" fill="none" stroke="#0d9488" stroke-width="0.5" opacity="0.1"/>
+            </pattern>
+          </defs>
+          <rect width="100%" height="100%" fill="url(#center-grad-3)"/>
+          <rect width="100%" height="100%" fill="url(#curves)"/>
+          <path d="M -5,-5 L 180,-5 L -5,130 Z" fill="url(#slate-grad-3)"/>
+          <path d="M -5,-5 L 140,-5 L -5,100 Z" fill="url(#teal-grad)" opacity="0.3"/>
+          <path d="M -5,130 L 180,-5 L 183,-5 L -5,133 Z" fill="url(#titanium-grad)"/>
+          <path d="M 120,509 L 323,320 L 323,509 Z" fill="url(#teal-grad)"/>
+          <path d="M 160,509 L 323,360 L 323,509 Z" fill="url(#slate-grad-3)" opacity="0.6"/>
+          <path d="M 117,509 L 120,509 L 323,317 L 323,320 Z" fill="url(#titanium-grad)"/>
+        `;
+      } else if (type === 'burgundy_rose') {
+        innerHTML = `
+          <defs>
+            <linearGradient id="rose-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stop-color="#b76e79"/>
+              <stop offset="25%" stop-color="#ffd1dc"/>
+              <stop offset="50%" stop-color="#e8c3c9"/>
+              <stop offset="75%" stop-color="#c88a95"/>
+              <stop offset="100%" stop-color="#a05864"/>
+            </linearGradient>
+            <linearGradient id="burgundy-grad" x1="0%" y1="0%" x2="0%" y2="100%">
+              <stop offset="0%" stop-color="#881337"/>
+              <stop offset="100%" stop-color="#4c0519"/>
+            </linearGradient>
+            <linearGradient id="center-grad-4" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stop-color="#fff1f2"/>
+              <stop offset="100%" stop-color="#fffafb"/>
+            </linearGradient>
+            <pattern id="waves" width="60" height="20" patternUnits="userSpaceOnUse">
+              <path d="M 0,10 Q 15,0 30,10 T 60,10" fill="none" stroke="#f43f5e" stroke-width="0.5" opacity="0.1"/>
+            </pattern>
+          </defs>
+          <rect width="100%" height="100%" fill="url(#center-grad-4)"/>
+          <rect width="100%" height="100%" fill="url(#waves)"/>
+          <path d="M -5,-5 L 323,-5 L 323,45 L -5,75 Z" fill="url(#burgundy-grad)"/>
+          <path d="M -5,75 L 323,45 L 323,48 L -5,78 Z" fill="url(#rose-grad)"/>
+          <path d="M -5,455 L 323,425 L 323,509 L -5,509 Z" fill="url(#burgundy-grad)"/>
+          <path d="M -5,455 L 323,425 L 323,428 L -5,458 Z" fill="url(#rose-grad)"/>
+          <path d="M -5,509 L 120,470 L 150,509 Z" fill="url(#rose-grad)" opacity="0.3"/>
+          <path d="M 323,509 L 200,480 L 170,509 Z" fill="url(#rose-grad)" opacity="0.3"/>
+        `;
+      } else if (type === 'dark_back') {
+        innerHTML = `
+          <defs>
+            <linearGradient id="graphite-grad" x1="0%" y1="0%" x2="0%" y2="100%">
+              <stop offset="0%" stop-color="#1e293b"/>
+              <stop offset="100%" stop-color="#0f172a"/>
+            </linearGradient>
+            <linearGradient id="silver-grad-back" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stop-color="#cbd5e1"/>
+              <stop offset="50%" stop-color="#64748b"/>
+              <stop offset="100%" stop-color="#334155"/>
+            </linearGradient>
+            <pattern id="carbon" width="6" height="6" patternUnits="userSpaceOnUse">
+              <path d="M0,3 L3,0 L6,3 L3,6 Z" fill="#1e293b" opacity="0.6"/>
+              <path d="M3,0 L6,3 L3,6 L0,3 Z" fill="#020617" opacity="0.6"/>
+            </pattern>
+          </defs>
+          <rect width="100%" height="100%" fill="url(#graphite-grad)"/>
+          <rect width="100%" height="100%" fill="url(#carbon)"/>
+          <path d="M -5,-5 L 200,-5 L -5,200 Z" fill="#000000" opacity="0.3"/>
+          <path d="M -5,200 L 200,-5 L 203,-5 L -5,203 Z" fill="url(#silver-grad-back)"/>
+          <path d="M 323,509 L 120,509 L 323,300 Z" fill="#000000" opacity="0.3"/>
+          <path d="M 120,509 L 323,300 L 323,303 L 117,509 Z" fill="url(#silver-grad-back)"/>
+        `;
+      }
+      
+      const svg = `
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 318 504" width="318" height="504">
+          ${innerHTML}
+        </svg>
+      `.trim();
+      return 'data:image/svg+xml;base64,' + btoa(svg);
+    };
+
+    // Preloaded backgrounds
+    const bgBlueFront = createPremiumPortraitBG('blue_gold');
+    const bgOrangeFront = createPremiumPortraitBG('orange_silver');
+    const bgTealFront = createPremiumPortraitBG('teal_titanium');
+    const bgBurgundyFront = createPremiumPortraitBG('burgundy_rose');
+    const bgMinimalBack = createPremiumPortraitBG('dark_back');
+
+    // Dynamic Photo, Logo and Signature Variables
+    let cardholderPhotoBase64 = '';
+    let cardholderSchoolLogoBase64 = '';
+    let cardholderSignatureBase64 = '';
+
+    // Simulated DB values
+    const dbValues = {
+      name: "Alexander Mercer",
+      id: "STU-2026-0041",
+      role: "Student",
+      program: "Information Technology",
+      dob: "2005-08-14",
+      validYears: "2026 - 2030",
+      schoolName: "Acme Academy"
+    };
+
+    // Initialize the IDCardEngine
+    const designer = new IDCardEngine({
+      templates: [
+        { id: 'tpl_blue_front', name: 'Premium Blue Front', side: 'front', category: 'Student ID', bgUrl: bgBlueFront },
+        { id: 'tpl_orange_front', name: 'Vibrant Orange Front', side: 'front', category: 'Student ID', bgUrl: bgOrangeFront },
+        { id: 'tpl_teal_teacher_front', name: 'Elite Teal Front', side: 'front', category: 'Teacher ID', bgUrl: bgTealFront },
+        { id: 'tpl_burgundy_teacher_front', name: 'Burgundy Classic Front', side: 'front', category: 'Teacher ID', bgUrl: bgBurgundyFront },
+        { id: 'tpl_dark_back', name: 'Minimalist Dark Back', side: 'back', category: 'Student ID', bgUrl: bgMinimalBack }
+      ],
+      saveUrl: 'save-template.php'
+    });
+
+    // Hook up database updates via simple custom event listeners!
+    window.addEventListener('idcardengine:change', (e) => {
+      updateDatabaseForm(e.detail);
+    });
+
+    window.addEventListener('idcardengine:save', (e) => {
+      logConsole('onSave', 'Exposed layout schema coordinates extracted.');
+    });
+
+    window.addEventListener('idcardengine:savesuccess', (e) => {
+      logConsole('Autosave', 'SUCCESS response: ' + e.detail.message);
+    });
+
+    window.addEventListener('idcardengine:saveerror', (e) => {
+      logConsole('Autosave', 'ERROR response: ' + e.detail.message);
+    });
+
+    // Sync database data to engine designer placeholders
+    function syncPlaceholderData() {
+      designer.designerPlaceholderData = {
+        id: dbValues.id,
+        id_number: dbValues.id,
+        name: dbValues.name,
+        role: dbValues.role,
+        program: dbValues.program,
+        dob: dbValues.dob,
+        validYears: dbValues.validYears,
+        valid_years: dbValues.validYears,
+        photoUrl: cardholderPhotoBase64,
+        signatureUrl: cardholderSignatureBase64,
+        schoolLogoUrl: cardholderSchoolLogoBase64,
+        schoolName: dbValues.schoolName,
+        school_name: dbValues.schoolName
+      };
+    }
+    syncPlaceholderData();
+    designer.refreshDesignerCanvas();
+
+    // Dynamically rebuild the Simulated Database input fields based on visible elements on the active side
+    function updateDatabaseForm(engine) {
+      const container = document.getElementById("db-form-container");
+      if (!container) return;
+      container.innerHTML = '';
+
+      // Gather elements visible on the active side
+      const activeElements = engine.layout.elements.filter(el => el.side === engine.activeSide && el.visible);
+
+      if (activeElements.length === 0) {
+        container.innerHTML = `<div style="text-align: center; color: #94a3b8; font-size: 0.8125rem; padding: 20px 0;">No visible elements on this side to input</div>`;
+        return;
+      }
+
+      activeElements.forEach(el => {
+        const group = document.createElement("div");
+        group.className = "db-input-group";
+
+        const label = document.createElement("label");
+        label.className = "db-label";
+        label.innerText = el.name;
+        group.appendChild(label);
+
+        if (el.id === 'photo') {
+          const fileInput = document.createElement("input");
+          fileInput.type = "file";
+          fileInput.accept = "image/*";
+          fileInput.style.display = "none";
+
+          const btn = document.createElement("button");
+          btn.className = "db-file-btn";
+          btn.innerText = cardholderPhotoBase64 ? "Change Photo" : "Upload Photo";
+
+          const previewText = document.createElement("div");
+          previewText.style.cssText = "font-size: 0.75rem; color: #94a3b8; margin-top: 4px; text-align: center;";
+          previewText.innerText = cardholderPhotoBase64 ? "Custom photo loaded" : "Using default illustration";
+
+          btn.addEventListener("click", () => fileInput.click());
+          fileInput.addEventListener("change", (e) => {
+            const file = e.target.files[0];
+            if (file) {
+              const reader = new FileReader();
+              reader.onload = (evt) => {
+                cardholderPhotoBase64 = evt.target.result;
+                previewText.innerText = `Uploaded: ${file.name.substring(0, 15)}...`;
+                btn.innerText = "Change Photo";
+                syncPlaceholderData();
+                designer.refreshDesignerCanvas();
+                logConsole('PhotoUploaded', `Loaded image file of size ${(file.size/1024).toFixed(1)} KB`);
+              };
+              reader.readAsDataURL(file);
+            }
+          });
+
+          group.appendChild(fileInput);
+          group.appendChild(btn);
+          group.appendChild(previewText);
+
+        } else if (el.id === 'school_logo') {
+          const fileInput = document.createElement("input");
+          fileInput.type = "file";
+          fileInput.accept = "image/*";
+          fileInput.style.display = "none";
+
+          const btn = document.createElement("button");
+          btn.className = "db-file-btn";
+          btn.innerText = cardholderSchoolLogoBase64 ? "Change Logo" : "Upload Logo";
+
+          const previewText = document.createElement("div");
+          previewText.style.cssText = "font-size: 0.75rem; color: #94a3b8; margin-top: 4px; text-align: center;";
+          previewText.innerText = cardholderSchoolLogoBase64 ? "Custom logo loaded" : "Using default logo";
+
+          btn.addEventListener("click", () => fileInput.click());
+          fileInput.addEventListener("change", (e) => {
+            const file = e.target.files[0];
+            if (file) {
+              const reader = new FileReader();
+              reader.onload = (evt) => {
+                cardholderSchoolLogoBase64 = evt.target.result;
+                previewText.innerText = `Uploaded: ${file.name.substring(0, 15)}...`;
+                btn.innerText = "Change Logo";
+                syncPlaceholderData();
+                designer.refreshDesignerCanvas();
+                logConsole('LogoUploaded', `Loaded school logo file of size ${(file.size/1024).toFixed(1)} KB`);
+              };
+              reader.readAsDataURL(file);
+            }
+          });
+
+          group.appendChild(fileInput);
+          group.appendChild(btn);
+          group.appendChild(previewText);
+
+        } else if (el.id === 'signature') {
+          const fileInput = document.createElement("input");
+          fileInput.type = "file";
+          fileInput.accept = "image/*";
+          fileInput.style.display = "none";
+
+          const btn = document.createElement("button");
+          btn.className = "db-file-btn";
+          btn.innerText = cardholderSignatureBase64 ? "Change Signature" : "Upload Signature";
+
+          const previewText = document.createElement("div");
+          previewText.style.cssText = "font-size: 0.75rem; color: #94a3b8; margin-top: 4px; text-align: center;";
+          previewText.innerText = cardholderSignatureBase64 ? "Custom signature loaded" : "Using default script signature";
+
+          btn.addEventListener("click", () => fileInput.click());
+          fileInput.addEventListener("change", (e) => {
+            const file = e.target.files[0];
+            if (file) {
+              const reader = new FileReader();
+              reader.onload = (evt) => {
+                cardholderSignatureBase64 = evt.target.result;
+                previewText.innerText = `Uploaded: ${file.name.substring(0, 15)}...`;
+                btn.innerText = "Change Signature";
+                syncPlaceholderData();
+                designer.refreshDesignerCanvas();
+                logConsole('SignatureUploaded', `Loaded signature file of size ${(file.size/1024).toFixed(1)} KB`);
+              };
+              reader.readAsDataURL(file);
+            }
+          });
+
+          group.appendChild(fileInput);
+          group.appendChild(btn);
+          group.appendChild(previewText);
+
+        } else if (el.id === 'role') {
+          const select = document.createElement("select");
+          select.className = "db-select";
+          const options = ["Student", "Staff", "Faculty"];
+          options.forEach(opt => {
+            const o = document.createElement("option");
+            o.value = opt;
+            o.text = opt;
+            if (dbValues.role === opt) o.selected = true;
+            select.appendChild(o);
+          });
+
+          select.addEventListener("change", (e) => {
+            dbValues.role = e.target.value;
+            syncPlaceholderData();
+            designer.refreshDesignerCanvas();
+            logConsole('DataSync', 'Updated Role: ' + dbValues.role);
+          });
+          group.appendChild(select);
+
+        } else if (el.id === 'dob') {
+          const input = document.createElement("input");
+          input.type = "date";
+          input.className = "db-input";
+          input.value = dbValues.dob;
+          input.addEventListener("input", (e) => {
+            dbValues.dob = e.target.value;
+            syncPlaceholderData();
+            designer.refreshDesignerCanvas();
+          });
+          input.addEventListener("change", () => {
+            logConsole('DataSync', 'Updated DOB: ' + dbValues.dob);
+          });
+          group.appendChild(input);
+
+        } else if (el.isCustom) {
+          const textarea = document.createElement("textarea");
+          textarea.className = "db-input";
+          textarea.rows = 3;
+          textarea.style.cssText = "font-family: inherit; resize: vertical;";
+          textarea.value = el.text || '';
+
+          textarea.addEventListener("input", (e) => {
+            el.text = e.target.value;
+            engine.updateElementVisual(el);
+          });
+          textarea.addEventListener("change", () => {
+            logConsole('DataSync', `Updated Custom Text for "${el.name}"`);
+            engine.refreshDesignerCanvas();
+          });
+          group.appendChild(textarea);
+
+        } else if (el.id.startsWith('qr_code')) {
+          const input = document.createElement("input");
+          input.type = "text";
+          input.className = "db-input";
+          input.value = dbValues.id;
+          input.addEventListener("input", (e) => {
+            dbValues.id = e.target.value;
+            syncPlaceholderData();
+            engine.updateElementVisual(el);
+          });
+          input.addEventListener("change", () => {
+            logConsole('DataSync', 'Updated QR Code ID: ' + dbValues.id);
+            engine.refreshDesignerCanvas();
+          });
+          group.appendChild(input);
+
+        } else {
+          const input = document.createElement("input");
+          input.type = "text";
+          input.className = "db-input";
+
+          let valKey = '';
+          if (el.id === 'name') valKey = 'name';
+          if (el.id === 'school_name') valKey = 'schoolName';
+          if (el.id === 'id_number') valKey = 'id';
+          if (el.id === 'program') valKey = 'program';
+          if (el.id === 'role') valKey = 'role';
+          if (el.id === 'valid_years') valKey = 'validYears';
+
+          input.value = dbValues[valKey] || '';
+          input.addEventListener("input", (e) => {
+            dbValues[valKey] = e.target.value;
+            syncPlaceholderData();
+            engine.updateElementVisual(el);
+          });
+          input.addEventListener("change", () => {
+            logConsole('DataSync', `Updated field "${el.name}" to: ${dbValues[valKey]}`);
+            engine.refreshDesignerCanvas();
+          });
+          group.appendChild(input);
+        }
+
+        container.appendChild(group);
+      });
+    }
+
+    // Run dynamic builder once on startup
+    updateDatabaseForm(designer);
+
+    // Helper logger function
+    function logConsole(action, details) {
+      const logs = document.getElementById("logs-container");
+      const timeStr = new Date().toTimeString().split(' ')[0];
+      
+      const line = document.createElement("p");
+      line.className = "log-line";
+      line.innerHTML = `<span class="log-time">[${timeStr}]</span> <span class="log-keyword">${action}</span>: ${escapeHTML(details)}`;
+      
+      logs.appendChild(line);
+      logs.scrollTop = logs.scrollHeight;
+    }
+
+    function escapeHTML(str) {
+      return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+    }
+
+    // Custom print preview triggering is now handled via constructor callback hook
+
+    // Create a beautiful default avatar SVG photo in base64 if user did not upload one
+    function createDefaultPhotoBase64() {
+      const svg = `
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 120" width="100" height="120">
+          <rect width="100" height="120" fill="#e2e8f0"/>
+          <circle cx="50" cy="45" r="22" fill="#94a3b8"/>
+          <path d="M15 105 C15 78, 85 78, 85 105 Z" fill="#94a3b8"/>
+          <rect x="5" y="5" width="90" height="110" fill="none" stroke="#64748b" stroke-width="1.5" stroke-dasharray="3 3" rx="2"/>
+        </svg>
+      `.trim();
+      return 'data:image/svg+xml;base64,' + btoa(svg);
+    }
+  </script>
+</body>
+</html>

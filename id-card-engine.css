@@ -1,0 +1,936 @@
+/* ID Card Design Engine - Scoped CSS */
+
+:root {
+  --id-engine-primary: #3b82f6;
+  --id-engine-primary-hover: #2563eb;
+  --id-engine-bg-dark: #0f172a;
+  --id-engine-bg-card: #1e293b;
+  --id-engine-border: #334155;
+  --id-engine-text-light: #f8fafc;
+  --id-engine-text-muted: #94a3b8;
+  --id-engine-accent: #10b981;
+  --id-engine-danger: #ef4444;
+}
+
+/* Designer Layout Container */
+.id-engine-container {
+  display: flex;
+  flex-direction: row;
+  gap: 24px;
+  width: 100%;
+  max-width: 100%; /* Expand to utilize all available horizontal workspace area */
+  margin: 0 auto;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  color: var(--id-engine-text-light);
+  box-sizing: border-box;
+}
+
+@media (max-width: 900px) {
+  .id-engine-container {
+    flex-direction: column;
+  }
+}
+
+/* Workspace Canvas Area */
+.id-engine-workspace {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+  background-color: var(--id-engine-bg-card);
+  border: 1px solid var(--id-engine-border);
+  border-radius: 16px;
+  padding: 24px;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+}
+
+.id-engine-workspace-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+  border-bottom: 1px solid var(--id-engine-border);
+  padding-bottom: 16px;
+}
+
+.id-engine-workspace-title {
+  font-size: 1.25rem;
+  font-weight: 600;
+  margin: 0;
+  color: var(--id-engine-text-light);
+}
+
+/* Tabs for Front / Back Sides */
+.id-engine-tabs {
+  display: flex;
+  background-color: var(--id-engine-bg-dark);
+  padding: 4px;
+  border-radius: 8px;
+  border: 1px solid var(--id-engine-border);
+}
+
+.id-engine-tab-btn {
+  background: none;
+  border: none;
+  color: var(--id-engine-text-muted);
+  padding: 8px 16px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.id-engine-tab-btn:hover {
+  color: var(--id-engine-text-light);
+}
+
+.id-engine-tab-btn.id-engine-active {
+  background-color: var(--id-engine-primary);
+  color: var(--id-engine-text-light);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+/* Canvas Container with aspect ratio of CR80 (504px / 318px = 1.585) */
+.id-engine-canvas-wrapper {
+  position: relative;
+  width: 100%;
+  max-width: 504px; /* Strict standard base designer width */
+  aspect-ratio: 1.585; /* Strict ISO 7810 landscape aspect ratio */
+  perspective: 1000px;
+  margin: 20px auto;
+  transition: all 0.3s ease;
+  box-sizing: border-box;
+}
+
+.id-engine-canvas-wrapper.id-engine-portrait {
+  max-width: 318px;
+  aspect-ratio: 0.6309; /* Strict ISO 7810 portrait aspect ratio (1 / 1.585) */
+}
+
+.id-engine-card-flip-container {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  transform-style: preserve-3d;
+  transition: transform 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.id-engine-card-flip-container.id-engine-flipped {
+  transform: rotateY(180deg);
+}
+
+.id-engine-card-side {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  container-type: inline-size; /* Enable container query support in the designer */
+  backface-visibility: hidden;
+  border-radius: 3.18mm; /* Exactly 3.18mm PVC corners standard */
+  overflow: hidden;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.3), 0 8px 10px -6px rgba(0, 0, 0, 0.3);
+  box-sizing: border-box;
+  background-color: #ffffff;
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  --id-engine-safe-zone: 1.87cqw; /* Configurable safe zone margin (~1.6mm equivalent) */
+}
+
+/* Red Dashed Guideline Overlay indicating Safe Zone (1.6mm equivalent) */
+.id-engine-safe-zone-guide {
+  position: absolute;
+  top: var(--id-engine-safe-zone, 1.87cqw);
+  left: var(--id-engine-safe-zone, 1.87cqw);
+  right: var(--id-engine-safe-zone, 1.87cqw);
+  bottom: var(--id-engine-safe-zone, 1.87cqw);
+  border: 1px dashed rgba(239, 68, 68, 0.35); /* Subtle red dashed safe zone line */
+  border-radius: calc(3.18mm - 1.6mm); /* Circular internal radius */
+  pointer-events: none; /* Let dragging click events pass through */
+  z-index: 10;
+  box-sizing: border-box;
+}
+
+/* Hide safe zone guide in print preview and print modes */
+.id-engine-print-card .id-engine-safe-zone-guide {
+  display: none !important;
+}
+
+/* Back side is rotated 180 degrees initially */
+.id-engine-card-back {
+  transform: rotateY(180deg);
+}
+
+/* Interactive Elements inside the Card */
+.id-engine-element {
+  position: absolute;
+  box-sizing: border-box;
+  cursor: grab;
+  user-select: none;
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+  line-height: 1.2;
+}
+
+.id-engine-element > *:not(.id-engine-resize-handle) {
+  pointer-events: none;
+}
+
+.id-engine-element:active {
+  cursor: grabbing;
+}
+
+/* Outline when selected */
+.id-engine-element.id-engine-selected {
+  outline: 1.5px dashed var(--id-engine-primary);
+  background-color: rgba(59, 130, 246, 0.08);
+  z-index: 100 !important;
+}
+
+/* Resize Handles on Selected Element */
+.id-engine-resize-handle {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  background-color: var(--id-engine-primary);
+  border: 1px solid var(--id-engine-text-light);
+  border-radius: 50%;
+  display: none;
+  z-index: 10;
+}
+
+/* Show resize handle when selected */
+.id-engine-element.id-engine-selected .id-engine-resize-handle {
+  display: block;
+}
+
+/* Bounding box position styles for handles */
+.id-engine-handle-nw { top: -4px; left: -4px; cursor: nwse-resize; }
+.id-engine-handle-ne { top: -4px; right: -4px; cursor: nesw-resize; }
+.id-engine-handle-se { bottom: -4px; right: -4px; cursor: nwse-resize; }
+.id-engine-handle-sw { bottom: -4px; left: -4px; cursor: nesw-resize; }
+
+/* Dynamic Element Visuals */
+.id-engine-photo-placeholder {
+  width: 100%;
+  height: 100%;
+  border: 1.5px dashed var(--id-engine-text-muted);
+  background-color: rgba(0, 0, 0, 0.05);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  color: var(--id-engine-text-muted);
+  font-size: 0.75rem;
+  text-align: center;
+  border-radius: 4px;
+}
+
+.id-engine-photo-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 4px;
+}
+
+.id-engine-qr-code {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background-color: #ffffff;
+  padding: 4%;
+  box-sizing: border-box;
+  border-radius: 4px;
+}
+
+.id-engine-qr-code svg,
+.id-engine-qr-code canvas {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.id-engine-text-node {
+  width: 100%;
+  word-break: break-word;
+  white-space: pre-wrap;
+}
+
+/* Control Panel / Sidebar */
+.id-engine-sidebar {
+  width: 360px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+@media (max-width: 900px) {
+  .id-engine-sidebar {
+    width: 100%;
+  }
+}
+
+.id-engine-panel {
+  background-color: var(--id-engine-bg-card);
+  border: 1px solid var(--id-engine-border);
+  border-radius: 12px;
+  padding: 16px;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+}
+
+.id-engine-panel-title {
+  font-size: 1rem;
+  font-weight: 600;
+  margin: 0 0 12px 0;
+  border-bottom: 1px solid var(--id-engine-border);
+  padding-bottom: 8px;
+  color: var(--id-engine-text-light);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.id-engine-control-group {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.id-engine-field-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.id-engine-field-row-inline {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.id-engine-label {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--id-engine-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.id-engine-input,
+.id-engine-select {
+  box-sizing: border-box;
+  background-color: var(--id-engine-bg-dark);
+  border: 1px solid var(--id-engine-border);
+  border-radius: 6px;
+  color: var(--id-engine-text-light);
+  padding: 8px 12px;
+  font-size: 0.875rem;
+  outline: none;
+  transition: border-color 0.2s ease;
+}
+
+.id-engine-input:focus,
+.id-engine-select:focus {
+  border-color: var(--id-engine-primary);
+}
+
+/* Toggle Switches */
+.id-engine-toggle {
+  position: relative;
+  display: inline-block;
+  width: 44px;
+  height: 24px;
+}
+
+.id-engine-toggle input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.id-engine-slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: var(--id-engine-border);
+  transition: .3s;
+  border-radius: 24px;
+}
+
+.id-engine-slider:before {
+  position: absolute;
+  content: "";
+  height: 16px;
+  width: 16px;
+  left: 4px;
+  bottom: 4px;
+  background-color: white;
+  transition: .3s;
+  border-radius: 50%;
+}
+
+.id-engine-toggle input:checked + .id-engine-slider {
+  background-color: var(--id-engine-primary);
+}
+
+.id-engine-toggle input:checked + .id-engine-slider:before {
+  transform: translateX(20px);
+}
+
+/* Button styles */
+.id-engine-btn {
+  background-color: var(--id-engine-primary);
+  color: white;
+  border: none;
+  border-radius: 6px;
+  padding: 8px 16px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.id-engine-btn:hover {
+  background-color: var(--id-engine-primary-hover);
+}
+
+.id-engine-btn-secondary {
+  background-color: transparent;
+  border: 1px solid var(--id-engine-border);
+  color: var(--id-engine-text-light);
+}
+
+.id-engine-btn-secondary:hover {
+  background-color: var(--id-engine-border);
+}
+
+.id-engine-btn-danger {
+  background-color: var(--id-engine-danger);
+}
+
+.id-engine-btn-danger:hover {
+  background-color: #dc2626;
+}
+
+.id-engine-btn-group {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+}
+
+.id-engine-btn-group-3 {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+/* Text align and weight toggle buttons */
+.id-engine-format-btn {
+  background-color: var(--id-engine-bg-dark);
+  border: 1px solid var(--id-engine-border);
+  color: var(--id-engine-text-muted);
+  border-radius: 6px;
+  padding: 6px;
+  font-size: 0.875rem;
+  cursor: pointer;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  transition: all 0.2s ease;
+}
+
+.id-engine-format-btn:hover {
+  color: var(--id-engine-text-light);
+  border-color: var(--id-engine-primary);
+}
+
+.id-engine-format-btn.id-engine-active {
+  background-color: var(--id-engine-primary);
+  color: white;
+  border-color: var(--id-engine-primary);
+}
+
+/* Position control fields side-by-side */
+.id-engine-coords-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+}
+
+/* List of elements toggles in elements panel */
+.id-engine-elements-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 200px;
+  overflow-y: auto;
+  margin-bottom: 12px;
+}
+
+.id-engine-element-list-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background-color: var(--id-engine-bg-dark);
+  padding: 8px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--id-engine-border);
+  font-size: 0.8125rem;
+}
+
+.id-engine-element-list-item:hover {
+  border-color: var(--id-engine-primary);
+  cursor: pointer;
+}
+
+.id-engine-element-list-item.id-engine-selected-item {
+  border-color: var(--id-engine-primary);
+  background-color: rgba(59, 130, 246, 0.1);
+}
+
+.id-engine-item-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.id-engine-item-icon {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: var(--id-engine-text-muted);
+}
+
+.id-engine-item-icon.id-engine-active-dot {
+  background-color: var(--id-engine-accent);
+}
+
+/* Print Preview Container Styles (Overlay Modal in Demo) */
+.id-engine-print-preview-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(15, 23, 42, 0.85);
+  backdrop-filter: blur(8px);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  color: var(--id-engine-text-light);
+}
+
+.id-engine-print-preview-modal {
+  background-color: var(--id-engine-bg-card);
+  border: 1px solid var(--id-engine-border);
+  border-radius: 16px;
+  width: 90%;
+  max-width: 900px;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+}
+
+.id-engine-print-preview-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 24px;
+  border-bottom: 1px solid var(--id-engine-border);
+}
+
+.id-engine-print-preview-title {
+  font-size: 1.25rem;
+  font-weight: 600;
+  margin: 0;
+}
+
+.id-engine-print-preview-body {
+  padding: 24px;
+  overflow-y: auto;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 24px;
+  background-color: var(--id-engine-bg-dark);
+}
+
+.id-engine-print-preview-cards {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 20px;
+  padding: 10px;
+}
+
+/* The actual print card containers */
+.id-engine-print-card {
+  width: 85.6mm;
+  height: 53.98mm;
+  container-type: inline-size;
+  position: relative;
+  background-color: #ffffff;
+  border-radius: 3.18mm;
+  overflow: hidden;
+  box-sizing: border-box;
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  color: #000000;
+  page-break-inside: avoid;
+  /* Scaled down container representation for screen view, but exact print dimensions */
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+}
+
+.id-engine-print-card.id-engine-portrait {
+  width: 53.98mm;
+  height: 85.6mm;
+}
+
+.id-engine-print-card-element {
+  position: absolute;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+  line-height: 1.2;
+  
+  /* Relative coordinates and dimensions */
+  left: calc(var(--element-x) * 1%);
+  top: calc(var(--element-y) * 1%);
+  width: calc(var(--element-width) * 1%);
+  /* Calculate font size relative to card width in mm to avoid print container query bugs */
+  font-size: calc(var(--font-size-pct) * 0.856mm); /* Default landscape base: 1% of 85.6mm = 0.856mm */
+}
+
+.id-engine-print-card.id-engine-portrait .id-engine-print-card-element {
+  font-size: calc(var(--font-size-pct) * 0.5398mm) !important; /* Portrait base: 1% of 53.98mm = 0.5398mm */
+}
+
+.id-engine-print-card-element.id-engine-has-height {
+  height: calc(var(--element-height) * 1%);
+}
+
+.id-engine-print-card-photo {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 4px;
+}
+
+.id-engine-print-card-qr {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background-color: #ffffff;
+  padding: 4%;
+  box-sizing: border-box;
+  border-radius: 4px;
+}
+
+.id-engine-print-card-qr svg,
+.id-engine-print-card-qr canvas {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.id-engine-print-preview-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  padding: 16px 24px;
+  border-top: 1px solid var(--id-engine-border);
+}
+
+/* Print Stylesheet */
+@media print {
+
+  /* Reset html and body layout and heights to prevent 100vh page overflow */
+  html, body {
+    height: auto !important;
+    min-height: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    display: block !important;
+    background: none !important;
+  }
+
+  /* Hide all main page content from layout completely to prevent empty pages or layout bleeding */
+  body > *:not(.id-engine-print-preview-overlay) {
+    display: none !important;
+  }
+  
+  /* Show only the print preview container and its children */
+  .id-engine-print-preview-overlay,
+  .id-engine-print-preview-overlay * {
+    visibility: visible !important;
+  }
+  
+  /* Reset overlays and absolute positioning for screens to match print page flow */
+  .id-engine-print-preview-overlay {
+    position: static !important;
+    display: block !important;
+    width: 100% !important;
+    height: auto !important;
+    background: none !important;
+    backdrop-filter: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+  
+  .id-engine-print-preview-modal {
+    border: none !important;
+    background: none !important;
+    box-shadow: none !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    max-height: 100% !important;
+    overflow: visible !important;
+    display: block !important;
+    position: static !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+  
+  .id-engine-print-preview-header,
+  .id-engine-print-preview-actions,
+  .id-engine-print-preview-body > p {
+    display: none !important;
+  }
+  
+  .id-engine-print-preview-body {
+    background: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    display: block !important;
+    overflow: visible !important;
+  }
+
+  .id-engine-print-preview-cards {
+    display: block !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+  
+  /* Layout cards on print page - exact PVC card dimensions */
+  .id-engine-print-card {
+    display: block !important;
+    width: 85.6mm !important;
+    height: 53.98mm !important;
+    border-radius: 3.18mm !important;
+    box-sizing: border-box !important;
+    position: relative !important;
+    margin: 0 auto !important; /* Center on sheet, no vertical margins */
+    box-shadow: none !important;
+    border: 0.5px solid #ccc !important; /* Cut line guidelines */
+    page-break-inside: avoid !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    --id-engine-safe-zone: 1.6mm; /* Hardcoded safe zone margin on physical print */
+  }
+
+  /* Force front and back sides onto separate sheets for double-sided PVC printing */
+  .id-engine-print-card:not(:last-child) {
+    page-break-after: always !important;
+    break-after: page !important;
+  }
+
+  /* Disable page breaks when printing a single side to prevent empty pages */
+  .id-engine-print-preview-overlay[data-print-mode="front"] .id-engine-print-card,
+  .id-engine-print-preview-overlay[data-print-mode="back"] .id-engine-print-card {
+    page-break-after: auto !important;
+    break-after: auto !important;
+  }
+
+  .id-engine-safe-zone-guide {
+    display: none !important; /* Hide visual guides on physical prints */
+  }
+
+  .id-engine-print-card.id-engine-portrait {
+    width: 53.98mm !important;
+    height: 85.6mm !important;
+  }
+
+  /* Force background images to render in print */
+  .id-engine-print-card {
+    background-size: cover !important;
+    background-position: center !important;
+    background-repeat: no-repeat !important;
+  }
+}
+
+/* Support separate side print triggers both on-screen and in print */
+.id-engine-print-preview-overlay[data-print-mode="front"] .id-engine-print-card-back {
+  display: none !important;
+}
+.id-engine-print-preview-overlay[data-print-mode="back"] .id-engine-print-card-front {
+  display: none !important;
+}
+
+/* Template Gallery Grid & Custom Background Uploaders CSS */
+.id-engine-gallery-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 10px;
+}
+
+.id-engine-gallery-tabs {
+  display: flex;
+  gap: 6px;
+  border-bottom: 1px solid var(--id-engine-border);
+  padding-bottom: 8px;
+  overflow-x: auto;
+}
+
+.id-engine-gallery-tabs::-webkit-scrollbar {
+  height: 4px;
+}
+
+.id-engine-gallery-tabs::-webkit-scrollbar-thumb {
+  background-color: var(--id-engine-border);
+  border-radius: 2px;
+}
+
+.id-engine-gallery-tab {
+  background: none;
+  border: 1px solid var(--id-engine-border);
+  color: var(--id-engine-text-muted);
+  border-radius: 6px;
+  padding: 4px 10px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.2s ease;
+}
+
+.id-engine-gallery-tab:hover {
+  color: var(--id-engine-text-light);
+  border-color: var(--id-engine-text-muted);
+}
+
+.id-engine-gallery-tab.id-engine-active {
+  background-color: var(--id-engine-primary);
+  color: #ffffff;
+  border-color: var(--id-engine-primary);
+}
+
+.id-engine-gallery-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+  max-height: 180px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.id-engine-gallery-grid::-webkit-scrollbar {
+  width: 4px;
+}
+
+.id-engine-gallery-grid::-webkit-scrollbar-thumb {
+  background-color: var(--id-engine-border);
+  border-radius: 2px;
+}
+
+.id-engine-gallery-card {
+  position: relative;
+  aspect-ratio: 1.585; /* Maintain exact standard card ratio in thumbnails! */
+  background-color: var(--id-engine-bg-dark);
+  border: 2px solid var(--id-engine-border);
+  border-radius: 6px;
+  overflow: hidden;
+  cursor: pointer;
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.id-engine-gallery-card:hover {
+  transform: translateY(-2px);
+  border-color: var(--id-engine-text-muted);
+  box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+}
+
+.id-engine-gallery-card.id-engine-selected-card {
+  border-color: var(--id-engine-primary);
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.3), 0 4px 8px rgba(0,0,0,0.2);
+}
+
+.id-engine-gallery-card-label {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  background-color: rgba(15, 23, 42, 0.85); /* Semi-transparent Slate 900 */
+  color: #f8fafc;
+  font-size: 0.65rem;
+  font-weight: 500;
+  text-align: center;
+  padding: 4px 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.id-engine-gallery-card-checkmark {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 16px;
+  height: 16px;
+  background-color: var(--id-engine-accent); /* Emerald Green check */
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+  animation: popIn 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes popIn {
+  0% { transform: scale(0); }
+  100% { transform: scale(1); }
+}
+
+.id-engine-gallery-card-checkmark svg {
+  width: 10px;
+  height: 10px;
+  stroke: #ffffff;
+  fill: none;
+}
+
+.id-engine-uploader-group {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 12px;
+}
