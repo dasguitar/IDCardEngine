@@ -218,8 +218,9 @@
       <h1>IDCardEngine</h1>
       <span class="badge">v1.0.0 Stable</span>
     </div>
-    <div style="font-size: 0.875rem; color: #94a3b8;">
-      Pure Vanilla JS & CSS ID Card Designer
+    <div style="display: flex; gap: 12px; align-items: center;">
+      <button id="nav-btn-page1" class="db-file-btn" style="background-color: #3b82f6; font-weight: 600; padding: 6px 16px; margin: 0; border-radius: 8px;">Page 1: Template Builder</button>
+      <button id="nav-btn-page2" class="db-file-btn" style="background-color: #374151; font-weight: 600; padding: 6px 16px; margin: 0; border-radius: 8px;">Page 2: Printing & Management</button>
     </div>
   </header>
 
@@ -254,6 +255,67 @@
       </div>
     </div>
   </main>
+
+  <!-- Page 2: Simulated host printing database and manager view -->
+  <section id="page-2-section" style="display:none; padding: 30px; max-width: 1600px; margin: 0 auto; width: 100%; box-sizing: border-box;">
+    <div style="display: grid; grid-template-columns: 1fr 420px; gap: 30px;">
+      
+      <!-- Left side: Host System Database Student Table & Controls -->
+      <div class="db-panel" style="height: fit-content; margin-bottom: 0;">
+        <h3 class="db-panel-title">
+          <svg style="width: 18px; height: 18px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M15 19.128a9.38 9.38 0 0 0 2.625.372 9.337 9.337 0 0 0 4.121-.952 4.125 4.125 0 0 0-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.109A11.386 11.386 0 0 1 10.089 18H9.769a11.375 11.375 0 0 1-4.833-1.113m14.566-2.608a9.27 9.27 0 0 1-6.228-5.067m-6.228 5.067A9.27 9.27 0 0 0 9.77 9.769m0 0a3 3 0 1 1-6 0 3 3 0 0 1 6 0Zm12.75 3.039a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
+          </svg>
+          Host System Database (Search & Print)
+        </h3>
+        
+        <!-- Search and Template selection controls -->
+        <div style="display: flex; gap: 16px; margin-bottom: 20px; flex-wrap: wrap;">
+          <div style="flex: 1; min-width: 200px; display: flex; flex-direction: column; gap: 4px;">
+            <label class="db-label">Search Students/Staff</label>
+            <input type="text" id="host-search" class="db-input" placeholder="Type name, ID or role...">
+          </div>
+          <div style="width: 250px; display: flex; flex-direction: column; gap: 4px;">
+            <label class="db-label">Active Print Template</label>
+            <select id="host-template-select" class="db-select">
+              <!-- Filled dynamically with templates -->
+            </select>
+          </div>
+        </div>
+
+        <!-- Mapped dynamic requirements warning display -->
+        <div id="host-requirements-badge" style="background-color: rgba(59, 130, 246, 0.1); border: 1px solid rgba(59, 130, 246, 0.2); border-radius: 8px; padding: 10px 14px; margin-bottom: 20px; font-size: 0.8rem; line-height: 1.4;">
+          <span style="color:#60a5fa; font-weight:600;">Active Template Requirements:</span> 
+          <code id="host-required-fields-list" style="color:#10b981; font-family:monospace; margin-left: 4px;">[Fetching...]</code>
+        </div>
+
+        <!-- Student Database Table -->
+        <div style="overflow-x: auto; background-color: #0b0f19; border-radius: 8px; border: 1px solid #1e293b;">
+          <table style="width: 100%; border-collapse: collapse; text-align: left; font-size: 0.85rem;">
+            <thead>
+              <tr style="border-bottom: 1px solid #1e293b; background-color: #0f172a; color: #94a3b8;">
+                <th style="padding: 12px; width: 40px; text-align: center;"><input type="checkbox" id="host-select-all" style="cursor:pointer;"></th>
+                <th style="padding: 12px;">ID Number</th>
+                <th style="padding: 12px;">Name</th>
+                <th style="padding: 12px;">Role</th>
+                <th style="padding: 12px;">Program / Dept</th>
+                <th style="padding: 12px;">Custom Fields</th>
+              </tr>
+            </thead>
+            <tbody id="host-database-tbody">
+              <!-- Mapped student records go here -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Right side: Mount point for IDCardBridge Live Previews -->
+      <div class="db-panel" id="id-bridge-mount-point" style="min-height: 400px; display: flex; flex-direction: column; margin-bottom: 0;">
+        <!-- IDCardBridge will dynamically inject live batch preview UI container here -->
+      </div>
+
+    </div>
+  </section>
 
   <script src="id-card-engine.js"></script>
   <script>
@@ -738,6 +800,7 @@
     // Helper logger function
     function logConsole(action, details) {
       const logs = document.getElementById("logs-container");
+      if (!logs) return;
       const timeStr = new Date().toTimeString().split(' ')[0];
       
       const line = document.createElement("p");
@@ -766,6 +829,198 @@
       `.trim();
       return 'data:image/svg+xml;base64,' + btoa(svg);
     }
+
+    // =========================================================================
+    // Page 2 Integration & Simulated Host DB Implementation
+    // =========================================================================
+
+    // 1. Instantiate the IDCardBridge connecting to the designer instance
+    const bridge = new IDCardBridge({
+      engine: designer,
+      targetSelector: '#id-bridge-mount-point'
+    });
+
+    // 2. Mock Database Records (with both standard and custom dynamic fields)
+    const mockStudentDatabase = [
+      { id: "STU-2026-0001", first_name: "John", last_name: "Doe", role: "Student", program: "Computer Science", dob: "2005-08-14", valid_years: "2026 - 2030", school_name: "Acme Academy", grade_level: "12th Grade", department: "Science & Tech", blood_type: "O+" },
+      { id: "STU-2026-0002", first_name: "Jane", last_name: "Smith", role: "Teacher", program: "Mathematics", dob: "1988-04-23", valid_years: "2024 - 2028", school_name: "Acme Academy", grade_level: "Faculty", department: "Math Department", blood_type: "A-" },
+      { id: "STU-2026-0003", first_name: "Robert", last_name: "Johnson", role: "Staff", program: "Administration", dob: "1982-11-12", valid_years: "2025 - 2029", school_name: "Acme Academy", grade_level: "Operations", department: "IT Support", blood_type: "B+" },
+      { id: "STU-2026-0004", first_name: "Alice", last_name: "Williams", role: "Student", program: "Fine Arts", dob: "2006-02-28", valid_years: "2026 - 2030", school_name: "Acme Academy", grade_level: "11th Grade", department: "Humanities", blood_type: "AB+" },
+      { id: "STU-2026-0005", first_name: "Charlie", last_name: "Brown", role: "Teacher", program: "Chemistry", dob: "1991-09-05", valid_years: "2023 - 2027", school_name: "Acme Academy", grade_level: "Faculty", department: "Science Department", blood_type: "O-" }
+    ];
+
+    let activeRequiredFields = [];
+
+    // 3. Navigation Controls
+    const btnPage1 = document.getElementById("nav-btn-page1");
+    const btnPage2 = document.getElementById("nav-btn-page2");
+    const mainSection = document.querySelector("main");
+    const page2Section = document.getElementById("page-2-section");
+
+    btnPage1.addEventListener("click", () => {
+      btnPage1.style.backgroundColor = "#3b82f6";
+      btnPage2.style.backgroundColor = "#374151";
+      mainSection.style.display = "grid";
+      page2Section.style.display = "none";
+      window.dispatchEvent(new CustomEvent('idcardengine:pagechange', { detail: { page: 1 } }));
+    });
+
+    btnPage2.addEventListener("click", () => {
+      btnPage2.style.backgroundColor = "#3b82f6";
+      btnPage1.style.backgroundColor = "#374151";
+      mainSection.style.display = "none";
+      page2Section.style.display = "block";
+      
+      // Load active layouts in dropdown
+      populateTemplateSelector();
+      
+      window.dispatchEvent(new CustomEvent('idcardengine:pagechange', { detail: { page: 2 } }));
+    });
+
+    // Populate active print template dropdown
+    function populateTemplateSelector() {
+      const select = document.getElementById("host-template-select");
+      select.innerHTML = "";
+      
+      const templates = designer.templates || [];
+      templates.forEach(t => {
+        const option = document.createElement("option");
+        option.value = t.id;
+        option.textContent = `${t.name} (${t.category})`;
+        if (designer.activeLayoutId === t.id) {
+          option.selected = true;
+        }
+        select.appendChild(option);
+      });
+    }
+
+    document.getElementById("host-template-select").addEventListener("change", (e) => {
+      const selectedId = e.target.value;
+      const templates = designer.templates || [];
+      const chosen = templates.find(t => t.id === selectedId);
+      if (chosen) {
+        designer.activeLayoutId = chosen.id;
+        designer.layout = designer.loadDefaultLayout();
+        
+        // Force update canvas and layouts
+        designer.refreshDesignerCanvas();
+        window.dispatchEvent(new CustomEvent('idcardengine:change'));
+      }
+    });
+
+    // 4. Intercept required template fields and simulate host dynamic DB query
+    window.addEventListener('idcardengine:templateready', (e) => {
+      const { requiredFields } = e.detail;
+      activeRequiredFields = requiredFields;
+      
+      // Update badge in UI
+      const badgeList = document.getElementById("host-required-fields-list");
+      badgeList.textContent = JSON.stringify(requiredFields);
+      
+      logConsole("TemplateReady", `Selected layout "${e.detail.templateId}" requests fields: ${requiredFields.join(', ')}`);
+      
+      // Re-trigger host selection table render and sync
+      renderHostDatabaseTable(document.getElementById("host-search").value);
+    });
+
+    // 5. Host search and table population
+    function renderHostDatabaseTable(searchQuery = "") {
+      const tbody = document.getElementById("host-database-tbody");
+      if (!tbody) return;
+      tbody.innerHTML = "";
+      
+      const query = searchQuery.toLowerCase().trim();
+      const filtered = mockStudentDatabase.filter(r => {
+        return r.id.toLowerCase().includes(query) ||
+               r.first_name.toLowerCase().includes(query) ||
+               r.last_name.toLowerCase().includes(query) ||
+               r.role.toLowerCase().includes(query) ||
+               r.program.toLowerCase().includes(query);
+      });
+
+      filtered.forEach(rec => {
+        const tr = document.createElement("tr");
+        tr.style.cssText = "border-bottom: 1px solid #1e293b; color: #f8fafc;";
+        
+        // Check if this record requires custom data fields
+        let customFieldsHTML = "";
+        activeRequiredFields.forEach(f => {
+          if (!['name', 'id_number', 'role', 'program', 'dob', 'valid_years', 'school_name', 'photo_url', 'school_logo_url', 'signature_url'].includes(f)) {
+            if (rec[f] !== undefined) {
+              customFieldsHTML += `<span style="display:inline-block; background-color:#1f2937; border:1px solid #374151; border-radius:4px; padding:2px 6px; margin-right:4px; font-size:0.75rem; color: #60a5fa;">${f}: ${rec[f]}</span>`;
+            }
+          }
+        });
+
+        if (!customFieldsHTML) {
+          customFieldsHTML = `<span style="color:#64748b; font-size:0.75rem; font-style:italic;">None requested</span>`;
+        }
+
+        tr.innerHTML = `
+          <td style="padding: 12px; text-align: center;"><input type="checkbox" class="host-record-select" data-id="${rec.id}" style="cursor:pointer;"></td>
+          <td style="padding: 12px; font-weight:600; color:#3b82f6;">${rec.id}</td>
+          <td style="padding: 12px;">${rec.first_name} ${rec.last_name}</td>
+          <td style="padding: 12px;"><span class="badge" style="background-color:${rec.role === 'Student' ? 'rgba(59,130,246,0.1)' : 'rgba(16,185,129,0.1)'}; color:${rec.role === 'Student' ? '#3b82f6' : '#10b981'}; border:none;">${rec.role}</span></td>
+          <td style="padding: 12px;">${rec.program}</td>
+          <td style="padding: 12px;">${customFieldsHTML}</td>
+        `;
+
+        tr.querySelector(".host-record-select").addEventListener("change", () => {
+          triggerHostSync();
+        });
+
+        tbody.appendChild(tr);
+      });
+      triggerHostSync();
+    }
+
+    // Trigger Custom Event to sync selected students to the card bridge
+    function triggerHostSync() {
+      const checkboxes = document.querySelectorAll(".host-record-select:checked");
+      const selectedIds = Array.from(checkboxes).map(cb => cb.getAttribute("data-id"));
+      
+      const selectedRecords = mockStudentDatabase.filter(r => selectedIds.includes(r.id)).map(r => {
+        const queriedRecord = {};
+        queriedRecord.id = r.id;
+        queriedRecord.id_number = r.id;
+        queriedRecord.first_name = r.first_name;
+        queriedRecord.last_name = r.last_name;
+        queriedRecord.role = r.role;
+        
+        // Dynamically request only active fields!
+        activeRequiredFields.forEach(f => {
+          if (r[f] !== undefined) {
+            queriedRecord[f] = r[f];
+          }
+        });
+
+        return queriedRecord;
+      });
+
+      const syncEvent = new CustomEvent('idcardengine:hostsync', {
+        detail: {
+          records: selectedRecords
+        }
+      });
+      window.dispatchEvent(syncEvent);
+    }
+
+    // Select/Deselect All Checkbox
+    document.getElementById("host-select-all").addEventListener("change", (e) => {
+      const checked = e.target.checked;
+      document.querySelectorAll(".host-record-select").forEach(cb => {
+        cb.checked = checked;
+      });
+      triggerHostSync();
+    });
+
+    // Search keyup handler
+    document.getElementById("host-search").addEventListener("input", (e) => {
+      renderHostDatabaseTable(e.target.value);
+    });
+
+    // Initial render
+    renderHostDatabaseTable();
   </script>
 </body>
 </html>

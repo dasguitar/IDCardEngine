@@ -237,6 +237,28 @@
   border-radius: 4px;
 }
 
+/* Photo field shape masks */
+.id-engine-mask-square {
+  clip-path: none !important;
+  border-radius: 4px !important;
+}
+
+.id-engine-mask-circle {
+  clip-path: circle(50% at 50% 50%) !important;
+  border-radius: 50% !important;
+}
+
+.id-engine-mask-rounded {
+  clip-path: inset(0% round 12%) !important;
+  border-radius: 12% !important;
+}
+
+.id-engine-mask-triangle {
+  clip-path: polygon(50% 0%, 0% 100%, 100% 100%) !important;
+  border-radius: 0 !important;
+}
+
+
 .id-engine-qr-code {
   width: 100%;
   height: 100%;

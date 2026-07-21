@@ -1,7 +1,7 @@
 /* ID Card Design Engine - Scoped Javascript */
 
 // Self-contained, pure JS QR Code generator (Model 2, Level M)
-const QRCodeGenerator = (function() {
+const QRCodeGenerator = (function () {
   const gfExp = new Uint8Array(512);
   const gfLog = new Uint8Array(256);
   let gfInitialized = false;
@@ -69,7 +69,7 @@ const QRCodeGenerator = (function() {
   const ALIGN_PATTERNS = [
     [], [], [6, 18], [6, 22], [6, 26], [6, 30], [6, 34]
   ];
-  
+
   const FORMAT_INFOS = [
     0x5412, 0x5125, 0x5E7C, 0x5B4B, 0x45F9, 0x40CE, 0x4F97, 0x4AA0
   ];
@@ -268,7 +268,7 @@ const QRCodeGenerator = (function() {
 
       for (let i = 0; i < 15; i++) {
         const val = (formatBits[i] === 1);
-        
+
         // vertical
         if (i < 6) {
           finalGrid[i][8] = val;
@@ -382,7 +382,7 @@ class IDCardEngine {
     this.activeSide = 'front';
     this.selectedElementId = null;
     this.activeGalleryCategory = 'All Templates'; // Default gallery tab filter
-    
+
     // Drag & Resize State
     this.isDragging = false;
     this.isResizing = false;
@@ -449,6 +449,7 @@ class IDCardEngine {
           y: 15.0,
           width: 40.0,
           height: 28.0,
+          maskShape: 'square',
           visible: true
         },
         {
@@ -562,7 +563,7 @@ class IDCardEngine {
           visible: true,
           isCustom: true,
           text: "This card is the property of the issuing institution. If found, please return to the administration office."
-        } ,
+        },
         {
           id: 'signature',
           name: 'Dean Signature',
@@ -604,7 +605,7 @@ class IDCardEngine {
 
   addElementToCard(type) {
     const side = this.activeSide;
-    
+
     const defaults = {
       photo: {
         id: 'photo',
@@ -614,6 +615,7 @@ class IDCardEngine {
         y: 20.0,
         width: 30.0,
         height: 38.0,
+        maskShape: 'square',
         visible: true
       },
       school_logo: {
@@ -808,19 +810,19 @@ class IDCardEngine {
   updateLayoutTemplatesDropdown() {
     const select = this.target.querySelector("#id-engine-layout-select");
     if (!select) return;
-    
+
     const prevVal = this.activeLayoutId || 'tpl_default';
     select.innerHTML = '';
-    
+
     this.layoutTemplates.forEach(t => {
       const opt = document.createElement("option");
       opt.value = t.id;
       opt.textContent = t.category ? `${t.name} (${t.category})` : t.name;
       select.appendChild(opt);
     });
-    
+
     select.value = prevVal;
-    
+
     const activeTpl = this.layoutTemplates.find(t => t.id === prevVal);
     const nameInput = this.target.querySelector("#id-engine-layout-name-input");
     if (nameInput && activeTpl) {
@@ -1021,52 +1023,74 @@ class IDCardEngine {
     });
 
     // Save & Print preview triggers
-    this.target.querySelector("#id-engine-save-btn").addEventListener("click", () => {
+    this.target.querySelector("#id-engine-save-btn").addEventListener("click", async () => {
       this.onSave(this.layout);
 
-      if (this.saveUrl) {
-        const layoutId = this.activeLayoutId && this.activeLayoutId !== 'tpl_default' ? this.activeLayoutId : 'layout_' + Date.now();
-        const layoutName = this.target.querySelector("#id-engine-layout-name-input").value.trim() || "Unnamed Template";
-        const layoutCategory = this.target.querySelector("#id-engine-layout-category-select").value;
-        this.activeLayoutId = layoutId;
+      if (!this.saveUrl) return;
 
-        const payload = {
-          action: 'save',
-          id: layoutId,
-          name: layoutName,
-          category: layoutCategory,
-          schema: this.layout
-        };
+      const layoutId = this.activeLayoutId && this.activeLayoutId !== 'tpl_default' ? this.activeLayoutId : 'layout_' + Date.now();
+      const layoutName = this.target.querySelector("#id-engine-layout-name-input").value.trim() || "Unnamed Template";
+      const layoutCategory = this.target.querySelector("#id-engine-layout-category-select").value;
+      this.activeLayoutId = layoutId;
 
-        console.log("IDCardEngine: Autosaving schema to " + this.saveUrl, payload);
-        fetch(this.saveUrl, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify(payload)
-        })
-        .then(response => {
-          if (!response.ok) {
-            throw new Error("HTTP error " + response.status);
-          }
-          return response.json();
-        })
+      // If backgrounds contain local Base64 strings from user uploads, upload them to the server first
+      const uploadPromises = [];
+
+      ['front', 'back'].forEach(side => {
+        const bg = this.layout.backgrounds[side];
+        // Check if it's a freshly uploaded local Base64 string
+        if (bg.type === 'image' && bg.value.startsWith('data:image')) {
+
+          // Package the file cleanly for the PHP controller routing
+          const formData = new FormData();
+          formData.append('action', 'upload_asset');
+          formData.append('template_id', layoutId);
+          formData.append('side', side);
+          formData.append('image_base64', bg.value);
+
+          const uploadPromise = fetch(this.saveUrl, { method: 'POST', body: formData })
+            .then(res => res.json())
+            .then(data => {
+              if (data.status === 'success' && data.file_url) {
+                // Swap out the heavy Base64 string with the clean server path string!
+                this.layout.backgrounds[side].value = data.file_url;
+              }
+            })
+            .catch(err => console.error(`Failed to upload ${side} background asset:`, err));
+
+          uploadPromises.push(uploadPromise);
+        }
+      });
+
+      // Wait for all image uploads to finish processing on the server
+      await Promise.all(uploadPromises);
+
+      // --- FINAL LIGHTWEIGHT SCHEMATIC DATABASE SAVE ---
+      const payload = {
+        action: 'save',
+        id: layoutId,
+        name: layoutName,
+        category: layoutCategory,
+        // this.layout orientation, backgrounds, and element arrays are now clean and free of Base64 blobs!
+        schema: this.layout
+      };
+
+      console.log("IDCardEngine: Saving clean schema payload:", payload);
+
+      fetch(this.saveUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      })
+        .then(response => response.json())
         .then(data => {
           console.log("IDCardEngine: Schema saved successfully.", data);
           if (data.status === 'success' && data.templates) {
             this.layoutTemplates = data.templates;
             this.updateLayoutTemplatesDropdown();
           }
-          const event = new CustomEvent('idcardengine:savesuccess', { detail: data });
-          window.dispatchEvent(event);
         })
-        .catch(err => {
-          console.error("IDCardEngine: Failed to save schema.", err);
-          const event = new CustomEvent('idcardengine:saveerror', { detail: err });
-          window.dispatchEvent(event);
-        });
-      }
+        .catch(err => console.error("IDCardEngine: Failed to save template geometry layout row.", err));
     });
 
     // Layout template selector updates
@@ -1075,15 +1099,15 @@ class IDCardEngine {
       layoutSelect.addEventListener("change", (e) => {
         const selectedId = e.target.value;
         this.activeLayoutId = selectedId;
-        
+
         const found = this.layoutTemplates.find(t => t.id === selectedId);
         if (found) {
           const nameInput = this.target.querySelector("#id-engine-layout-name-input");
           if (nameInput) nameInput.value = found.name;
-          
+
           const categorySelect = this.target.querySelector("#id-engine-layout-category-select");
           if (categorySelect) categorySelect.value = found.category || 'Student ID';
-          
+
           if (found.schema) {
             this.loadLayout(found.schema);
           } else {
@@ -1098,13 +1122,13 @@ class IDCardEngine {
     if (layoutNewBtn) {
       layoutNewBtn.addEventListener("click", () => {
         this.activeLayoutId = 'layout_' + Date.now();
-        
+
         const nameInput = this.target.querySelector("#id-engine-layout-name-input");
         if (nameInput) nameInput.value = "New Template Layout";
-        
+
         const defaultFront = this.templates && this.templates.find(t => t.id === 'tpl_blue_front');
         const defaultBack = this.templates && this.templates.find(t => t.id === 'tpl_dark_back');
-        
+
         const blankLayout = {
           orientation: 'portrait',
           elements: [], // Completely blank elements list
@@ -1209,7 +1233,7 @@ class IDCardEngine {
             this.layout.backgrounds.front.type = 'image';
             this.layout.backgrounds.front.value = dataUrl;
             this.layout.backgrounds.front.templateId = ''; // Clear selected preset checkmarks
-            
+
             // Focus front side
             if (this.activeSide !== 'front') {
               this.switchSide('front');
@@ -1219,7 +1243,7 @@ class IDCardEngine {
                 else btn.classList.remove("id-engine-active");
               });
             }
-            
+
             this.bgValInput.value = dataUrl;
             this.refreshDesignerCanvas();
             if (this.onChange) this.onChange(this);
@@ -1241,7 +1265,7 @@ class IDCardEngine {
             this.layout.backgrounds.back.type = 'image';
             this.layout.backgrounds.back.value = dataUrl;
             this.layout.backgrounds.back.templateId = '';
-            
+
             // Focus back side
             if (this.activeSide !== 'back') {
               this.switchSide('back');
@@ -1251,7 +1275,7 @@ class IDCardEngine {
                 else btn.classList.remove("id-engine-active");
               });
             }
-            
+
             this.bgValInput.value = dataUrl;
             this.refreshDesignerCanvas();
             if (this.onChange) this.onChange(this);
@@ -1279,7 +1303,7 @@ class IDCardEngine {
     } else {
       this.flipper.classList.add("id-engine-flipped");
     }
-    
+
     // Clear selection if switching sides and selected item is on the other side
     if (this.selectedElementId) {
       const el = this.layout.elements.find(item => item.id === this.selectedElementId);
@@ -1287,7 +1311,7 @@ class IDCardEngine {
         this.deselectElement();
       }
     }
-    
+
     this.refreshBackgroundInputs();
     this.refreshElementsList();
     if (this.onChange) this.onChange(this);
@@ -1307,10 +1331,10 @@ class IDCardEngine {
 
     this.renderSideCanvas('front', this.frontCanvas);
     this.renderSideCanvas('back', this.backCanvas);
-    
+
     this.applyBackground('front');
     this.applyBackground('back');
-    
+
     this.refreshBackgroundInputs();
     this.refreshElementsList();
     this.refreshPropertiesPanel();
@@ -1320,7 +1344,7 @@ class IDCardEngine {
   applyBackground(side) {
     const bgInfo = this.layout.backgrounds[side];
     const canvas = side === 'front' ? this.frontCanvas : this.backCanvas;
-    
+
     if (bgInfo.type === 'image') {
       canvas.style.backgroundImage = `url(${bgInfo.value})`;
       canvas.style.backgroundColor = '#ffffff';
@@ -1363,8 +1387,12 @@ class IDCardEngine {
       } else if (el.id === 'photo') {
         const placeholder = elDiv.querySelector(".id-engine-photo-placeholder");
         if (placeholder) {
+          placeholder.classList.remove('id-engine-mask-circle', 'id-engine-mask-rounded', 'id-engine-mask-triangle', 'id-engine-mask-square');
+          const maskClass = `id-engine-mask-${el.maskShape || 'square'}`;
+          placeholder.classList.add(maskClass);
+
           if (this.designerPlaceholderData.photoUrl) {
-            placeholder.innerHTML = `<img class="id-engine-photo-image" src="${this.designerPlaceholderData.photoUrl}">`;
+            placeholder.innerHTML = `<img class="id-engine-photo-image ${maskClass}" src="${this.designerPlaceholderData.photoUrl}">`;
           } else {
             placeholder.innerHTML = `
               <svg style="width: 40%; height: 40%; margin-bottom: 4px;" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
@@ -1411,7 +1439,7 @@ class IDCardEngine {
           elDiv.style.fontStyle = el.fontStyle || 'normal';
           elDiv.style.textAlign = el.textAlign || 'left';
           elDiv.style.justifyContent = el.textAlign === 'center' ? 'center' : (el.textAlign === 'right' ? 'flex-end' : 'flex-start');
-          
+
           if (el.isCustom) {
             textNode.innerText = el.text || '';
           } else {
@@ -1433,22 +1461,22 @@ class IDCardEngine {
 
   renderSideCanvas(side, canvasContainer) {
     canvasContainer.innerHTML = '';
-    
+
     // Add Safe Zone Guide guideline overlay
     const safeZoneGuide = document.createElement("div");
     safeZoneGuide.className = "id-engine-safe-zone-guide";
     canvasContainer.appendChild(safeZoneGuide);
-    
+
     // Gather all elements belonging to this side
     const sideElements = this.layout.elements.filter(el => el.side === side);
-    
+
     sideElements.forEach(el => {
       if (!el.visible) return;
-      
+
       const elDiv = document.createElement("div");
       elDiv.className = `id-engine-element ${this.selectedElementId === el.id ? 'id-engine-selected' : ''}`;
       elDiv.setAttribute("data-id", el.id);
-      
+
       // Inline coordinates as CSS Variables
       elDiv.style.setProperty('--element-x', el.x);
       elDiv.style.setProperty('--element-y', el.y);
@@ -1456,7 +1484,7 @@ class IDCardEngine {
       if (el.height) {
         elDiv.style.setProperty('--element-height', el.height);
       }
-      
+
       // Standard styles applied in CSS via percentage positioning
       elDiv.style.left = 'calc(var(--element-x) * 1%)';
       elDiv.style.top = 'calc(var(--element-y) * 1%)';
@@ -1477,9 +1505,10 @@ class IDCardEngine {
       // Element contents based on type
       if (el.id === 'photo') {
         const placeholder = document.createElement("div");
-        placeholder.className = "id-engine-photo-placeholder";
+        const maskClass = `id-engine-mask-${el.maskShape || 'square'}`;
+        placeholder.className = `id-engine-photo-placeholder ${maskClass}`;
         if (this.designerPlaceholderData.photoUrl) {
-          placeholder.innerHTML = `<img class="id-engine-photo-image" src="${this.designerPlaceholderData.photoUrl}">`;
+          placeholder.innerHTML = `<img class="id-engine-photo-image ${maskClass}" src="${this.designerPlaceholderData.photoUrl}">`;
         } else {
           placeholder.innerHTML = `
             <svg style="width: 40%; height: 40%; margin-bottom: 4px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
@@ -1525,7 +1554,7 @@ class IDCardEngine {
       } else if (el.id.startsWith('qr_code')) {
         const qrWrapper = document.createElement("div");
         qrWrapper.className = "id-engine-qr-code";
-        
+
         // Render embedded QR code based on designer dummy ID
         qrWrapper.innerHTML = QRCodeGenerator.toSVGString(this.designerPlaceholderData.id, el.fontColor || '#000000');
         elDiv.appendChild(qrWrapper);
@@ -1534,7 +1563,7 @@ class IDCardEngine {
         // Text node
         const textNode = document.createElement("div");
         textNode.className = "id-engine-text-node";
-        
+
         // Font sizing via Container Queries is ideal, but let's calculate relative to canvas width
         // setting style as percentage of container width
         elDiv.style.fontSize = `calc(${el.fontSize || 3.2} * 1cqw)`;
@@ -1543,7 +1572,7 @@ class IDCardEngine {
         elDiv.style.fontStyle = el.fontStyle || 'normal';
         elDiv.style.textAlign = el.textAlign || 'left';
         elDiv.style.justifyContent = el.textAlign === 'center' ? 'center' : (el.textAlign === 'right' ? 'flex-end' : 'flex-start');
-        
+
         // Display value
         if (el.isCustom) {
           textNode.innerText = el.text || '';
@@ -1551,13 +1580,13 @@ class IDCardEngine {
           // Designer preview displays field name/placeholder
           textNode.innerText = this.designerPlaceholderData[el.id] || el.name;
         }
-        
+
         elDiv.appendChild(textNode);
       }
 
       // Interaction listeners for selection & drag initialization
       elDiv.addEventListener("mousedown", (e) => this.handleElementMouseDown(e, el));
-      
+
       canvasContainer.appendChild(elDiv);
     });
   }
@@ -1565,12 +1594,12 @@ class IDCardEngine {
   // 4. Drag & Resize operations
   handleElementMouseDown(e, el) {
     e.stopPropagation();
-    
+
     this.selectElement(el.id);
 
     const canvas = el.side === 'front' ? this.frontCanvas : this.backCanvas;
     const cardRect = canvas.getBoundingClientRect();
-    
+
     // Check if clicked a resize handle
     if (e.target.classList.contains("id-engine-resize-handle")) {
       this.isResizing = true;
@@ -1596,13 +1625,13 @@ class IDCardEngine {
 
   handleMouseMove(e) {
     if (!this.isDragging && !this.isResizing) return;
-    
+
     const el = this.layout.elements.find(item => item.id === this.selectedElementId);
     if (!el) return;
-    
+
     const canvas = el.side === 'front' ? this.frontCanvas : this.backCanvas;
     const cardRect = canvas.getBoundingClientRect();
-    
+
     const deltaX = (e.clientX - this.dragStart.x) / cardRect.width * 100;
     const deltaY = (e.clientY - this.dragStart.y) / cardRect.height * 100;
 
@@ -1610,15 +1639,15 @@ class IDCardEngine {
       // Reposition
       let newX = parseFloat((this.elementStart.x + deltaX).toFixed(2));
       let newY = parseFloat((this.elementStart.y + deltaY).toFixed(2));
-      
+
       // Keep boundaries inside card, leaving 2% safety bleed if wanted, but constraint 0 to 100 is nice
       newX = Math.max(0, Math.min(100 - el.width, newX));
       const elHeight = el.height || 5;
       newY = Math.max(0, Math.min(100 - elHeight, newY));
-      
+
       el.x = newX;
       el.y = newY;
-      
+
     } else if (this.isResizing) {
       // Resize
       if (this.resizeDirection.includes('e')) {
@@ -1666,7 +1695,7 @@ class IDCardEngine {
   // 5. Select element & properties logic
   selectElement(elementId) {
     this.selectedElementId = elementId;
-    
+
     // Highlight in editor
     const allElements = this.target.querySelectorAll(".id-engine-element");
     allElements.forEach(div => {
@@ -1685,7 +1714,7 @@ class IDCardEngine {
     this.selectedElementId = null;
     const allElements = this.target.querySelectorAll(".id-engine-element");
     allElements.forEach(div => div.classList.remove("id-engine-selected"));
-    
+
     this.refreshElementsList();
     this.refreshPropertiesPanel();
   }
@@ -1693,11 +1722,11 @@ class IDCardEngine {
   // Dynamic elements panel switches - Show all elements side-agnostically
   refreshElementsList() {
     this.elementsListContainer.innerHTML = '';
-    
+
     this.layout.elements.forEach(el => {
       const itemDiv = document.createElement("div");
       itemDiv.className = `id-engine-element-list-item ${this.selectedElementId === el.id ? 'id-engine-selected-item' : ''}`;
-      
+
       itemDiv.innerHTML = `
         <div class="id-engine-item-label">
           <span class="id-engine-item-icon ${el.visible ? 'id-engine-active-dot' : ''}"></span>
@@ -1754,7 +1783,7 @@ class IDCardEngine {
 
     this.propertiesPanel.style.display = 'block';
     const controlsContainer = this.target.querySelector("#id-engine-properties-controls");
-    
+
     // Properties template
     let controlsHTML = `
       <div class="id-engine-field-row">
@@ -1823,6 +1852,18 @@ class IDCardEngine {
           <input type="color" class="id-engine-input" style="height: 38px; padding: 2px;" id="id-prop-color" value="${el.fontColor || '#000000'}">
         </div>
       `;
+    } else if (el.id === 'photo') {
+      controlsHTML += `
+        <div class="id-engine-field-row">
+          <label class="id-engine-label">Photo Mask Shape</label>
+          <select class="id-engine-select" id="id-prop-mask-shape">
+            <option value="square">Square</option>
+            <option value="circle">Circle</option>
+            <option value="rounded">Rounded Square</option>
+            <option value="triangle">Triangle</option>
+          </select>
+        </div>
+      `;
     }
 
     if (el.isCustom) {
@@ -1852,17 +1893,17 @@ class IDCardEngine {
         input.addEventListener("input", (e) => {
           let val = isFloat ? parseFloat(e.target.value) : e.target.value;
           if (isFloat && isNaN(val)) return;
-          
+
           if (isFloat) {
             // Strict boundaries checking
             if (key === 'x') val = Math.max(0, Math.min(100 - el.width, val));
             if (key === 'y') val = Math.max(0, Math.min(100 - (el.height || 5), val));
             if (key === 'width') val = Math.max(5, Math.min(100 - el.x, val));
             if (key === 'height') val = Math.max(5, Math.min(100 - el.y, val));
-            
+
             input.value = val;
           }
-          
+
           el[key] = val;
           this.updateElementVisual(el);
         });
@@ -1888,7 +1929,7 @@ class IDCardEngine {
         const newSide = e.target.value;
         el.side = newSide;
         this.switchSide(newSide);
-        
+
         // Sync active class on side tabs
         const tabBtns = this.target.querySelectorAll(".id-engine-tab-btn");
         tabBtns.forEach(btn => {
@@ -1898,7 +1939,7 @@ class IDCardEngine {
             btn.classList.remove("id-engine-active");
           }
         });
-        
+
         this.selectElement(el.id);
         if (this.onChange) this.onChange(this);
       });
@@ -1946,6 +1987,16 @@ class IDCardEngine {
       }
     } else if (el.id.startsWith('qr_code')) {
       bindVal("#id-prop-color", "fontColor", false);
+    } else if (el.id === 'photo') {
+      const maskShapeSelect = this.target.querySelector("#id-prop-mask-shape");
+      if (maskShapeSelect) {
+        maskShapeSelect.value = el.maskShape || 'square';
+        maskShapeSelect.addEventListener("change", (e) => {
+          el.maskShape = e.target.value;
+          this.updateElementVisual(el);
+          if (this.onChange) this.onChange(this);
+        });
+      }
     }
 
     // Delete custom button
@@ -2018,7 +2069,7 @@ class IDCardEngine {
 
     // Extract dynamic categories from preset templates array
     const categories = ['All Templates', ...new Set(this.templates.map(t => t.category).filter(Boolean))];
-    
+
     categories.forEach(cat => {
       const tabBtn = document.createElement("button");
       tabBtn.className = `id-engine-gallery-tab ${this.activeGalleryCategory === cat ? 'id-engine-active' : ''}`;
@@ -2070,11 +2121,11 @@ class IDCardEngine {
       card.addEventListener("click", (e) => {
         e.stopPropagation();
         const side = t.side; // Apply to standard side of template preset
-        
+
         this.layout.backgrounds[side].type = 'image';
         this.layout.backgrounds[side].value = t.bgUrl;
         this.layout.backgrounds[side].templateId = t.id;
-        
+
         if (side === this.activeSide) {
           this.bgValInput.value = t.bgUrl;
         }
@@ -2102,10 +2153,110 @@ class IDCardEngine {
     container.appendChild(gridDiv);
   }
 
+  // Helper method: Compile a single card side HTML from database record and layout schema
+  compileCardSideHTML(side, cardHolderData, layoutSchema) {
+    const schema = layoutSchema || this.layout;
+    const bgInfo = schema.backgrounds[side];
+    let bgCSS = '';
+    if (bgInfo.type === 'image') {
+      bgCSS = `background-image: url(${bgInfo.value});`;
+    } else {
+      if (bgInfo.value.includes('gradient')) {
+        bgCSS = `background: ${bgInfo.value};`;
+      } else {
+        bgCSS = `background-color: ${bgInfo.value};`;
+      }
+    }
+
+    const sideEls = schema.elements.filter(el => el.side === side && el.visible);
+    let elsHTML = '';
+
+    sideEls.forEach(el => {
+      const isValEmpty = (key) => !cardHolderData[key] || String(cardHolderData[key]).trim() === '';
+
+      // Skip empty elements dynamically
+      if (el.id === 'dob' && isValEmpty('dob')) return;
+      if (el.id === 'program' && isValEmpty('program')) return;
+      if (el.id === 'role' && isValEmpty('role')) return;
+      if (el.id === 'id_number' && isValEmpty('id')) return;
+      if (el.id === 'name' && isValEmpty('name')) return;
+      if (el.id === 'valid_years' && isValEmpty('validYears')) return;
+      if (el.id === 'school_name' && isValEmpty('schoolName')) return;
+
+      let inner = '';
+      if (el.id === 'photo') {
+        const photoUrl = cardHolderData.photoUrl || createDefaultAvatarBase64();
+        const maskClass = `id-engine-mask-${el.maskShape || 'square'}`;
+        inner = `<img class="id-engine-print-card-photo ${maskClass}" src="${photoUrl}">`;
+      } else if (el.id === 'school_logo') {
+        const logoUrl = cardHolderData.schoolLogoUrl || createDefaultSchoolLogo();
+        inner = `<img class="id-engine-print-card-photo" style="object-fit: contain; background: transparent;" src="${logoUrl}">`;
+      } else if (el.id === 'signature') {
+        const sigUrl = cardHolderData.signatureUrl || `data:image/svg+xml;base64,${btoa(`
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 150 50" width="150" height="50">
+            <path d="M 10 35 C 30 10, 45 45, 60 15 C 75 5, 80 40, 95 30 C 110 20, 120 40, 140 25" fill="none" stroke="#1e3a8a" stroke-width="2" stroke-linecap="round"/>
+            <text x="10" y="47" font-family="Georgia, serif" font-size="6" fill="#64748b" letter-spacing="1">DEAN OF STUDENTS</text>
+          </svg>
+        `.trim())}`;
+        inner = `<img class="id-engine-print-card-photo" style="object-fit: contain; background: transparent;" src="${sigUrl}">`;
+      } else if (el.id.startsWith('qr_code')) {
+        const qrSVG = QRCodeGenerator.toSVGString(cardHolderData.id || "STU-EMPTY", el.fontColor || '#000000');
+        inner = `<div class="id-engine-print-card-qr">${qrSVG}</div>`;
+      } else {
+        let textVal = '';
+        if (el.isCustom) {
+          textVal = el.text || '';
+          const matches = textVal.match(/\{([^}]+)\}/g);
+          if (matches) {
+            matches.forEach(m => {
+              const fieldName = m.replace(/[{}]/g, '');
+              const resolved = cardHolderData[fieldName] !== undefined ? cardHolderData[fieldName] : '';
+              textVal = textVal.replace(m, resolved);
+            });
+          }
+        } else {
+          if (el.id === 'name') textVal = cardHolderData.name;
+          if (el.id === 'school_name') textVal = cardHolderData.schoolName;
+          if (el.id === 'id_number') textVal = cardHolderData.id;
+          if (el.id === 'role') textVal = cardHolderData.role;
+          if (el.id === 'program') textVal = cardHolderData.program;
+          if (el.id === 'dob') textVal = `DOB: ${cardHolderData.dob}`;
+          if (el.id === 'valid_years') textVal = cardHolderData.validYears || cardHolderData.valid_years || '';
+        }
+        inner = `<div class="id-engine-text-node">${textVal}</div>`;
+      }
+
+      const isPortrait = schema.orientation === 'portrait';
+      elsHTML += `
+        <div class="id-engine-print-card-element ${el.height ? 'id-engine-has-height' : ''}" style="
+          --element-x: ${el.x}; 
+          --element-y: ${el.y}; 
+          --element-width: ${el.width}; 
+          ${el.height ? `--element-height: ${el.height};` : ''}
+          --font-size-pct: ${el.fontSize || 3};
+          color: ${el.fontColor || '#000000'};
+          font-weight: ${el.fontWeight || 'normal'};
+          font-style: ${el.fontStyle || 'normal'};
+          text-align: ${el.textAlign || 'left'};
+          justify-content: ${el.textAlign === 'center' ? 'center' : (el.textAlign === 'right' ? 'flex-end' : 'flex-start')};
+        ">
+          ${inner}
+        </div>
+      `;
+    });
+
+    const orientationClass = schema.orientation === 'portrait' ? 'id-engine-portrait' : '';
+    return `
+      <div class="id-engine-print-card id-engine-print-card-${side} ${orientationClass}" style="${bgCSS}">
+        ${elsHTML}
+      </div>
+    `;
+  }
+
   // 7. PUBLIC METHOD: Render Printable preview modal & launch window print dialog
   renderPrintPreview({ layoutSchema, cardHolderData }) {
     const schema = layoutSchema || this.layout;
-    
+
     // Dynamically inject @page CSS to match the card dimensions exactly
     let printStyleTag = document.getElementById("id-card-print-page-style");
     if (!printStyleTag) {
@@ -2136,100 +2287,10 @@ class IDCardEngine {
 
     const overlay = document.createElement("div");
     overlay.className = "id-engine-print-preview-overlay";
-    
-    const orientationClass = isPortrait ? 'id-engine-portrait' : '';
-    
-    const buildCardSideHTML = (side) => {
-      const bgInfo = schema.backgrounds[side];
-      let bgCSS = '';
-      if (bgInfo.type === 'image') {
-        bgCSS = `background-image: url(${bgInfo.value});`;
-      } else {
-        if (bgInfo.value.includes('gradient')) {
-          bgCSS = `background: ${bgInfo.value};`;
-        } else {
-          bgCSS = `background-color: ${bgInfo.value};`;
-        }
-      }
-      
-      const sideEls = schema.elements.filter(el => el.side === side && el.visible);
-      let elsHTML = '';
-      
-      sideEls.forEach(el => {
-        const isValEmpty = (key) => !cardHolderData[key] || cardHolderData[key].trim() === '';
-        
-        // Skip empty elements dynamically
-        if (el.id === 'dob' && isValEmpty('dob')) return;
-        if (el.id === 'program' && isValEmpty('program')) return;
-        if (el.id === 'role' && isValEmpty('role')) return;
-        if (el.id === 'id_number' && isValEmpty('id')) return;
-        if (el.id === 'name' && isValEmpty('name')) return;
-        if (el.id === 'valid_years' && isValEmpty('validYears')) return;
-        if (el.id === 'school_name' && isValEmpty('schoolName')) return;
-        
-        let inner = '';
-        if (el.id === 'photo') {
-          const photoUrl = cardHolderData.photoUrl || createDefaultAvatarBase64();
-          inner = `<img class="id-engine-print-card-photo" src="${photoUrl}">`;
-        } else if (el.id === 'school_logo') {
-          const logoUrl = cardHolderData.schoolLogoUrl || createDefaultSchoolLogo();
-          inner = `<img class="id-engine-print-card-photo" style="object-fit: contain; background: transparent;" src="${logoUrl}">`;
-        } else if (el.id === 'signature') {
-          // Fallback to stylized SVG signature of Dean if empty
-          const sigUrl = cardHolderData.signatureUrl || `data:image/svg+xml;base64,${btoa(`
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 150 50" width="150" height="50">
-              <path d="M 10 35 C 30 10, 45 45, 60 15 C 75 5, 80 40, 95 30 C 110 20, 120 40, 140 25" fill="none" stroke="#1e3a8a" stroke-width="2" stroke-linecap="round"/>
-              <text x="10" y="47" font-family="Georgia, serif" font-size="6" fill="#64748b" letter-spacing="1">DEAN OF STUDENTS</text>
-            </svg>
-          `.trim())}`;
-          inner = `<img class="id-engine-print-card-photo" style="object-fit: contain; background: transparent;" src="${sigUrl}">`;
-        } else if (el.id.startsWith('qr_code')) {
-          const qrSVG = QRCodeGenerator.toSVGString(cardHolderData.id || "STU-EMPTY", el.fontColor || '#000000');
-          inner = `<div class="id-engine-print-card-qr">${qrSVG}</div>`;
-        } else {
-          let textVal = '';
-          if (el.isCustom) {
-            textVal = el.text || '';
-          } else {
-            if (el.id === 'name') textVal = cardHolderData.name;
-            if (el.id === 'school_name') textVal = cardHolderData.schoolName;
-            if (el.id === 'id_number') textVal = cardHolderData.id;
-            if (el.id === 'role') textVal = cardHolderData.role;
-            if (el.id === 'program') textVal = cardHolderData.program;
-            if (el.id === 'dob') textVal = `DOB: ${cardHolderData.dob}`;
-            if (el.id === 'valid_years') textVal = cardHolderData.validYears || cardHolderData.valid_years || '';
-          }
-          inner = `<div class="id-engine-text-node">${textVal}</div>`;
-        }
-        
-        elsHTML += `
-          <div class="id-engine-print-card-element ${el.height ? 'id-engine-has-height' : ''}" style="
-            --element-x: ${el.x}; 
-            --element-y: ${el.y}; 
-            --element-width: ${el.width}; 
-            ${el.height ? `--element-height: ${el.height};` : ''}
-            --font-size-pct: ${el.fontSize || 3};
-            color: ${el.fontColor || '#000000'};
-            font-weight: ${el.fontWeight || 'normal'};
-            font-style: ${el.fontStyle || 'normal'};
-            text-align: ${el.textAlign || 'left'};
-            justify-content: ${el.textAlign === 'center' ? 'center' : (el.textAlign === 'right' ? 'flex-end' : 'flex-start')};
-          ">
-            ${inner}
-          </div>
-        `;
-      });
-      
-      return `
-        <div class="id-engine-print-card id-engine-print-card-${side} ${orientationClass}" style="${bgCSS}">
-          ${elsHTML}
-        </div>
-      `;
-    };
-    
-    const frontHTML = buildCardSideHTML('front');
-    const backHTML = buildCardSideHTML('back');
-    
+
+    const frontHTML = this.compileCardSideHTML('front', cardHolderData, schema);
+    const backHTML = this.compileCardSideHTML('back', cardHolderData, schema);
+
     overlay.innerHTML = `
       <div class="id-engine-print-preview-modal">
         <div class="id-engine-print-preview-header">
@@ -2252,13 +2313,13 @@ class IDCardEngine {
         </div>
       </div>
     `;
-    
+
     document.body.appendChild(overlay);
-    
+
     overlay.querySelector("#id-engine-close-preview-btn").addEventListener("click", () => {
       document.body.removeChild(overlay);
     });
-    
+
     overlay.querySelector("#id-engine-print-front-btn").addEventListener("click", () => {
       overlay.setAttribute("data-print-mode", "front");
       window.print();
@@ -2275,3 +2336,390 @@ class IDCardEngine {
     });
   }
 }
+
+// =========================================================================
+// IDCardBridge: Integration Layer for Page 2 (ID Printing & Management)
+// =========================================================================
+class IDCardBridge {
+  constructor(config = {}) {
+    this.printPagePattern = config.printPagePattern || /print|manage|page2/i;
+    this.engine = config.engine;
+    this.targetSelector = config.targetSelector || '#id-preview-panel';
+    this.currentRecords = [];
+    this.requiredFields = [];
+
+    if (!this.engine) {
+      throw new Error("IDCardBridge: An instance of IDCardEngine must be provided via the 'engine' parameter.");
+    }
+
+    this.initDetection();
+  }
+
+  initDetection() {
+    const checkRoute = () => {
+      // Allow detection via URL hash, path, or a simulated query param
+      const urlMatches = this.printPagePattern.test(window.location.href) || 
+                          this.printPagePattern.test(window.location.hash) ||
+                          (document.body && document.body.classList.contains('id-page-2'));
+      if (urlMatches) {
+        this.activateBridge();
+      } else {
+        this.deactivateBridge();
+      }
+    };
+
+    window.addEventListener('popstate', checkRoute);
+    window.addEventListener('hashchange', checkRoute);
+    window.addEventListener('load', checkRoute);
+    
+    // Also support manual state toggle events
+    window.addEventListener('idcardengine:pagechange', (e) => {
+      if (e.detail && e.detail.page === 2) {
+        document.body.classList.add('id-page-2');
+      } else {
+        document.body.classList.remove('id-page-2');
+      }
+      checkRoute();
+    });
+
+    checkRoute();
+  }
+
+  activateBridge() {
+    console.log("IDCardBridge: Page 2 (Print Page) active.");
+    this.setupListeners();
+    this.injectPreviewUI();
+    this.notifyTemplateRequirements();
+  }
+
+  deactivateBridge() {
+    const existing = document.querySelector(this.targetSelector);
+    if (existing) {
+      existing.remove();
+    }
+  }
+
+  // Parse the active template layout schema to compute dynamic field dependencies
+  getRequiredFields() {
+    const schema = this.engine.layout;
+    if (!schema || !schema.elements) return [];
+
+    const fieldMap = {
+      'name': 'name',
+      'id_number': 'id_number',
+      'role': 'role',
+      'program': 'program',
+      'dob': 'dob',
+      'valid_years': 'valid_years',
+      'school_name': 'school_name',
+      'photo': 'photo_url',
+      'school_logo': 'school_logo_url',
+      'signature': 'signature_url'
+    };
+
+    const requiredFields = new Set();
+    schema.elements.forEach(el => {
+      if (el.visible) {
+        if (fieldMap[el.id]) {
+          requiredFields.add(fieldMap[el.id]);
+        } else if (el.isCustom && el.text && el.text.includes('{')) {
+          // Parse curly brace syntax for custom parameters e.g., {department} or {grade}
+          const matches = el.text.match(/\{([^}]+)\}/g);
+          if (matches) {
+            matches.forEach(m => requiredFields.add(m.replace(/[{}]/g, '')));
+          }
+        }
+      }
+    });
+
+    this.requiredFields = Array.from(requiredFields);
+    return this.requiredFields;
+  }
+
+  notifyTemplateRequirements() {
+    const fields = this.getRequiredFields();
+    console.log("IDCardBridge: Broadcasting required fields to host:", fields);
+    const event = new CustomEvent('idcardengine:templateready', {
+      detail: {
+        templateId: this.engine.activeLayoutId,
+        requiredFields: fields
+      }
+    });
+    window.dispatchEvent(event);
+  }
+
+  setupListeners() {
+    // Listen for data sync from the host system
+    window.addEventListener('idcardengine:hostsync', (e) => {
+      if (e.detail && Array.isArray(e.detail.records)) {
+        this.updatePreviews(e.detail.records);
+      }
+    });
+
+    // Re-evaluate template requirements if the template changes
+    window.addEventListener('idcardengine:change', () => {
+      this.notifyTemplateRequirements();
+      if (this.currentRecords.length > 0) {
+        this.updatePreviews(this.currentRecords);
+      }
+    });
+  }
+
+  // Maps database fields to the structure expected by the template elements
+  mapDatabaseToCardHolder(dbRecord) {
+    const cardData = {};
+    
+    // Mapped standard values
+    cardData.id = dbRecord.id_number || dbRecord.id || "";
+    cardData.name = `${dbRecord.first_name || ''} ${dbRecord.last_name || ''}`.trim() || dbRecord.name || "";
+    cardData.role = dbRecord.role || "";
+    cardData.program = dbRecord.program || dbRecord.department || dbRecord.program_name || "";
+    cardData.dob = dbRecord.dob || "";
+    cardData.validYears = dbRecord.valid_years || dbRecord.validYears || "";
+    cardData.photoUrl = dbRecord.photo_url || dbRecord.photoUrl || "";
+    cardData.schoolLogoUrl = dbRecord.school_logo_url || dbRecord.schoolLogoUrl || "";
+    cardData.schoolName = dbRecord.school_name || dbRecord.schoolName || "";
+
+    // Mapped custom variables from dynamic slots
+    this.requiredFields.forEach(field => {
+      if (cardData[field] === undefined && dbRecord[field] !== undefined) {
+        cardData[field] = dbRecord[field];
+      }
+    });
+
+    return cardData;
+  }
+
+  injectPreviewUI() {
+    let container = document.querySelector(this.targetSelector);
+    if (!container) {
+      container = document.createElement('div');
+      container.id = this.targetSelector.replace('#', '');
+      container.className = 'id-preview-panel-container';
+      
+      // Look for a suitable injection parent in host system, default to main/body
+      const parent = document.querySelector('#id-bridge-mount-point') || document.querySelector('main') || document.body;
+      parent.appendChild(container);
+    }
+
+    container.innerHTML = `
+      <div class="id-preview-header" style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #1e293b; padding-bottom:12px; margin-bottom:16px;">
+        <h3 class="id-preview-title" style="margin:0; color:#3b82f6; font-size:1.1rem; display:flex; align-items:center; gap:8px;">
+          <svg style="width:20px; height:20px;" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v12a1.5 1.5 0 001.5 1.5zm10.5-11.25h.008v.008h-.008V8.25zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" />
+          </svg>
+          Live Batch Previews
+        </h3>
+        <button id="id-btn-batch-print" class="db-file-btn" style="background-color:#10b981; color:#fff; font-weight:600; padding:6px 12px; margin:0;" disabled>
+          Print Selected Cards (0)
+        </button>
+      </div>
+      <div id="id-preview-cards-grid" class="id-preview-grid" style="display:grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap:20px; max-height: 500px; overflow-y: auto; padding: 4px;">
+        <p class="id-empty-preview" style="color:#94a3b8; font-size:0.875rem; text-align:center; grid-column: 1 / -1; padding: 40px 0;">
+          Select students or staff from the list to display their live previews.
+        </p>
+      </div>
+    `;
+
+    document.getElementById('id-btn-batch-print').addEventListener('click', () => {
+      this.printBatch();
+    });
+  }
+
+  updatePreviews(records) {
+    this.currentRecords = records;
+    const grid = document.getElementById('id-preview-cards-grid');
+    const printBtn = document.getElementById('id-btn-batch-print');
+    
+    if (!grid) return;
+
+    if (!records || records.length === 0) {
+      grid.innerHTML = `
+        <p class="id-empty-preview" style="color:#94a3b8; font-size:0.875rem; text-align:center; grid-column: 1 / -1; padding: 40px 0;">
+          Select students or staff from the list to display their live previews.
+        </p>
+      `;
+      if (printBtn) {
+        printBtn.disabled = true;
+        printBtn.textContent = "Print Selected Cards (0)";
+      }
+      return;
+    }
+
+    if (printBtn) {
+      printBtn.disabled = false;
+      printBtn.textContent = `Print Selected Cards (${records.length})`;
+    }
+
+    grid.innerHTML = '';
+    records.forEach(rec => {
+      const cardData = this.mapDatabaseToCardHolder(rec);
+      const previewWrapper = document.createElement('div');
+      previewWrapper.className = 'id-preview-card-card-wrapper';
+      previewWrapper.style.cssText = `
+        background-color: #1e293b;
+        border: 1px solid #334155;
+        border-radius: 12px;
+        padding: 12px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 10px;
+        box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);
+      `;
+
+      const cardContainer = document.createElement('div');
+      cardContainer.className = 'id-preview-double-sided-wrapper';
+      cardContainer.style.cssText = `
+        display: flex;
+        gap: 8px;
+        justify-content: center;
+        transform: scale(0.48);
+        transform-origin: top center;
+        height: 180px;
+        margin-bottom: -70px;
+      `;
+
+      const frontHTML = this.engine.compileCardSideHTML('front', cardData);
+      const backHTML = this.engine.compileCardSideHTML('back', cardData);
+
+      cardContainer.innerHTML = frontHTML + backHTML;
+
+      const infoLabel = document.createElement('div');
+      infoLabel.style.cssText = `
+        font-size: 0.8rem;
+        font-weight: 600;
+        color: #f8fafc;
+        text-align: center;
+        border-top: 1px solid #334155;
+        width: 100%;
+        padding-top: 8px;
+      `;
+      infoLabel.textContent = `${cardData.name} (${cardData.id})`;
+
+      previewWrapper.appendChild(cardContainer);
+      previewWrapper.appendChild(infoLabel);
+      grid.appendChild(previewWrapper);
+    });
+  }
+
+  printBatch() {
+    if (this.currentRecords.length === 0) return;
+
+    // Dynamically inject print-specific styles for batch cards
+    let printStyleTag = document.getElementById("id-card-print-page-style");
+    if (!printStyleTag) {
+      printStyleTag = document.createElement("style");
+      printStyleTag.id = "id-card-print-page-style";
+      document.head.appendChild(printStyleTag);
+    }
+    const isPortrait = this.engine.layout.orientation === 'portrait';
+    if (isPortrait) {
+      printStyleTag.innerHTML = `
+        @media print {
+          @page {
+            size: 53.98mm 85.6mm !important;
+            margin: 0 !important;
+          }
+          body * {
+            visibility: hidden;
+          }
+          #id-batch-print-overlay, #id-batch-print-overlay * {
+            visibility: visible;
+          }
+          #id-batch-print-overlay {
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: auto;
+            margin: 0;
+            padding: 0;
+            background: none !important;
+          }
+          .id-engine-print-card {
+            page-break-inside: avoid !important;
+            page-break-after: always !important;
+            margin: 0 !important;
+            border: none !important;
+            box-shadow: none !important;
+          }
+        }
+      `;
+    } else {
+      printStyleTag.innerHTML = `
+        @media print {
+          @page {
+            size: 85.6mm 53.98mm !important;
+            margin: 0 !important;
+          }
+          body * {
+            visibility: hidden;
+          }
+          #id-batch-print-overlay, #id-batch-print-overlay * {
+            visibility: visible;
+          }
+          #id-batch-print-overlay {
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: auto;
+            margin: 0;
+            padding: 0;
+            background: none !important;
+          }
+          .id-engine-print-card {
+            page-break-inside: avoid !important;
+            page-break-after: always !important;
+            margin: 0 !important;
+            border: none !important;
+            box-shadow: none !important;
+          }
+        }
+      `;
+    }
+
+    const overlay = document.createElement("div");
+    overlay.id = "id-batch-print-overlay";
+    overlay.className = "id-engine-print-preview-overlay";
+    
+    let cardsHTML = "";
+    this.currentRecords.forEach(rec => {
+      const cardData = this.mapDatabaseToCardHolder(rec);
+      cardsHTML += this.engine.compileCardSideHTML('front', cardData);
+      cardsHTML += this.engine.compileCardSideHTML('back', cardData);
+    });
+
+    overlay.innerHTML = `
+      <div class="id-engine-print-preview-modal" style="max-width: 90%; width: 1200px;">
+        <div class="id-engine-print-preview-header">
+          <h3 class="id-engine-print-preview-title">Batch Print Preview (${this.currentRecords.length} Cards)</h3>
+          <button class="id-engine-btn id-engine-btn-secondary" style="padding: 4px 10px;" id="id-engine-close-batch-preview-btn">✕ Close</button>
+        </div>
+        <div class="id-engine-print-preview-body" style="max-height: 70vh; overflow-y: auto;">
+          <p style="margin: 0 0 15px 0; text-align: center; color: var(--id-engine-text-muted); font-size: 0.875rem;">
+            Confirm card layouts before printing. Front and Back sides will print sequentially with page breaks.
+          </p>
+          <div class="id-engine-print-preview-cards" style="display:flex; flex-wrap:wrap; gap:16px; justify-content:center;">
+            ${cardsHTML}
+          </div>
+        </div>
+        <div class="id-engine-print-preview-actions" style="display: flex; gap: 12px; justify-content: center;">
+          <button class="id-engine-btn" id="id-engine-trigger-batch-print-btn" style="background-color: #10b981;">Print Cards Now</button>
+        </div>
+      </div>
+    `;
+
+    document.body.appendChild(overlay);
+
+    overlay.querySelector("#id-engine-close-batch-preview-btn").addEventListener("click", () => {
+      document.body.removeChild(overlay);
+    });
+
+    overlay.querySelector("#id-engine-trigger-batch-print-btn").addEventListener("click", () => {
+      window.print();
+    });
+  }
+}
+
