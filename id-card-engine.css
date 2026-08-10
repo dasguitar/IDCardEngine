@@ -235,6 +235,9 @@
   height: 100%;
   object-fit: cover;
   border-radius: 4px;
+  border: none !important;
+  outline: none !important;
+  box-shadow: none !important;
 }
 
 /* Photo field shape masks */
@@ -257,7 +260,6 @@
   clip-path: polygon(50% 0%, 0% 100%, 100% 100%) !important;
   border-radius: 0 !important;
 }
-
 
 .id-engine-qr-code {
   width: 100%;

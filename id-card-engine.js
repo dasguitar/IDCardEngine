@@ -811,8 +811,15 @@ class IDCardEngine {
     const select = this.target.querySelector("#id-engine-layout-select");
     if (!select) return;
 
-    const prevVal = this.activeLayoutId || 'tpl_default';
     select.innerHTML = '';
+
+    // If actively building a new unsaved template, add a special placeholder option
+    if (this.activeLayoutId === 'new' || (!this.activeLayoutId && this.layoutTemplates.length === 0)) {
+      const newOpt = document.createElement("option");
+      newOpt.value = "new";
+      newOpt.textContent = "+ New Unsaved Template";
+      select.appendChild(newOpt);
+    }
 
     this.layoutTemplates.forEach(t => {
       const opt = document.createElement("option");
@@ -821,12 +828,28 @@ class IDCardEngine {
       select.appendChild(opt);
     });
 
-    select.value = prevVal;
+    // Match activeLayoutId with select options
+    if (this.activeLayoutId === 'new') {
+      select.value = 'new';
+    } else if (this.activeLayoutId && this.layoutTemplates.some(t => String(t.id) === String(this.activeLayoutId))) {
+      select.value = String(this.activeLayoutId);
+    } else if (this.layoutTemplates.length > 0) {
+      this.activeLayoutId = this.layoutTemplates[0].id;
+      select.value = String(this.activeLayoutId);
+    } else {
+      this.activeLayoutId = 'new';
+      select.value = 'new';
+    }
 
-    const activeTpl = this.layoutTemplates.find(t => t.id === prevVal);
+    // Update input fields for active template if found in layoutTemplates
+    const activeTpl = this.layoutTemplates.find(t => String(t.id) === String(this.activeLayoutId));
     const nameInput = this.target.querySelector("#id-engine-layout-name-input");
-    if (nameInput && activeTpl) {
-      nameInput.value = activeTpl.name;
+    if (nameInput) {
+      if (activeTpl) {
+        nameInput.value = activeTpl.name;
+      } else if (this.activeLayoutId === 'new' && (!nameInput.value || nameInput.value === 'Default Factory Design')) {
+        nameInput.value = "New Template Layout";
+      }
     }
     const categorySelect = this.target.querySelector("#id-engine-layout-category-select");
     if (categorySelect && activeTpl) {
@@ -1028,10 +1051,10 @@ class IDCardEngine {
 
       if (!this.saveUrl) return;
 
-      const layoutId = this.activeLayoutId && this.activeLayoutId !== 'tpl_default' ? this.activeLayoutId : 'layout_' + Date.now();
+      const isExisting = this.activeLayoutId && String(this.activeLayoutId) !== 'tpl_default' && String(this.activeLayoutId) !== 'new';
+      const layoutId = isExisting ? this.activeLayoutId : '';
       const layoutName = this.target.querySelector("#id-engine-layout-name-input").value.trim() || "Unnamed Template";
       const layoutCategory = this.target.querySelector("#id-engine-layout-category-select").value;
-      this.activeLayoutId = layoutId;
 
       // If backgrounds contain local Base64 strings from user uploads, upload them to the server first
       const uploadPromises = [];
@@ -1039,12 +1062,12 @@ class IDCardEngine {
       ['front', 'back'].forEach(side => {
         const bg = this.layout.backgrounds[side];
         // Check if it's a freshly uploaded local Base64 string
-        if (bg.type === 'image' && bg.value.startsWith('data:image')) {
+        if (bg && bg.type === 'image' && bg.value && bg.value.startsWith('data:image')) {
 
           // Package the file cleanly for the PHP controller routing
           const formData = new FormData();
           formData.append('action', 'upload_asset');
-          formData.append('template_id', layoutId);
+          formData.append('template_id', layoutId || 'temp_' + Date.now());
           formData.append('side', side);
           formData.append('image_base64', bg.value);
 
@@ -1085,12 +1108,30 @@ class IDCardEngine {
         .then(response => response.json())
         .then(data => {
           console.log("IDCardEngine: Schema saved successfully.", data);
-          if (data.status === 'success' && data.templates) {
-            this.layoutTemplates = data.templates;
+          if (data.status === 'success') {
+            if (data.saved_id) {
+              this.activeLayoutId = data.saved_id;
+            }
+            if (data.templates) {
+              this.layoutTemplates = data.templates;
+            }
             this.updateLayoutTemplatesDropdown();
+
+            window.dispatchEvent(new CustomEvent("idcardengine:savesuccess", {
+              detail: { message: data.message || `Template "${layoutName}" saved successfully.` }
+            }));
+          } else {
+            window.dispatchEvent(new CustomEvent("idcardengine:saveerror", {
+              detail: { message: data.message || "Save failed." }
+            }));
           }
         })
-        .catch(err => console.error("IDCardEngine: Failed to save template geometry layout row.", err));
+        .catch(err => {
+          console.error("IDCardEngine: Failed to save template geometry layout row.", err);
+          window.dispatchEvent(new CustomEvent("idcardengine:saveerror", {
+            detail: { message: err.message || "Network error during save." }
+          }));
+        });
     });
 
     // Layout template selector updates
@@ -1098,9 +1139,31 @@ class IDCardEngine {
     if (layoutSelect) {
       layoutSelect.addEventListener("change", (e) => {
         const selectedId = e.target.value;
+
+        if (selectedId === 'new') {
+          this.activeLayoutId = 'new';
+          const nameInput = this.target.querySelector("#id-engine-layout-name-input");
+          if (nameInput) nameInput.value = "New Template Layout";
+          const categorySelect = this.target.querySelector("#id-engine-layout-category-select");
+          if (categorySelect) categorySelect.value = 'Student ID';
+
+          const defaultFront = this.templates && this.templates.find(t => t.id === 'tpl_blue_front');
+          const defaultBack = this.templates && this.templates.find(t => t.id === 'tpl_dark_back');
+          const blankLayout = {
+            orientation: 'portrait',
+            elements: [],
+            backgrounds: {
+              front: { type: defaultFront ? 'image' : 'color', value: defaultFront ? defaultFront.bgUrl : '#f8fafc', templateId: defaultFront ? 'tpl_blue_front' : '' },
+              back: { type: defaultBack ? 'image' : 'color', value: defaultBack ? defaultBack.bgUrl : '#ffffff', templateId: defaultBack ? 'tpl_dark_back' : '' }
+            }
+          };
+          this.loadLayout(blankLayout);
+          return;
+        }
+
         this.activeLayoutId = selectedId;
 
-        const found = this.layoutTemplates.find(t => t.id === selectedId);
+        const found = this.layoutTemplates.find(t => String(t.id) === String(selectedId));
         if (found) {
           const nameInput = this.target.querySelector("#id-engine-layout-name-input");
           if (nameInput) nameInput.value = found.name;
@@ -1110,7 +1173,7 @@ class IDCardEngine {
 
           if (found.schema) {
             this.loadLayout(found.schema);
-          } else {
+          } else if (typeof this.loadDefaultLayout === 'function') {
             this.loadLayout(this.loadDefaultLayout());
           }
         }
@@ -1121,10 +1184,13 @@ class IDCardEngine {
     const layoutNewBtn = this.target.querySelector("#id-engine-layout-new-btn");
     if (layoutNewBtn) {
       layoutNewBtn.addEventListener("click", () => {
-        this.activeLayoutId = 'layout_' + Date.now();
+        this.activeLayoutId = 'new';
 
         const nameInput = this.target.querySelector("#id-engine-layout-name-input");
         if (nameInput) nameInput.value = "New Template Layout";
+
+        const categorySelect = this.target.querySelector("#id-engine-layout-category-select");
+        if (categorySelect) categorySelect.value = 'Student ID';
 
         const defaultFront = this.templates && this.templates.find(t => t.id === 'tpl_blue_front');
         const defaultBack = this.templates && this.templates.find(t => t.id === 'tpl_dark_back');
@@ -1147,7 +1213,8 @@ class IDCardEngine {
         };
 
         this.loadLayout(blankLayout);
-        console.log("IDCardEngine: Ready to build new blank template: " + this.activeLayoutId);
+        this.updateLayoutTemplatesDropdown();
+        console.log("IDCardEngine: Ready to build new blank template.");
       });
     }
 
@@ -1198,7 +1265,7 @@ class IDCardEngine {
       const templateId = e.target.value;
       const side = this.activeSide;
       if (templateId) {
-        const template = this.templates.find(t => t.id === templateId);
+        const template = this.templates.find(t => String(t.id) === String(templateId));
         if (template) {
           this.layout.backgrounds[side].type = 'image';
           this.layout.backgrounds[side].value = template.bgUrl;
@@ -1863,6 +1930,11 @@ class IDCardEngine {
             <option value="triangle">Triangle</option>
           </select>
         </div>
+        <div class="id-engine-field-row" style="margin-top: 8px;">
+          <button type="button" class="id-engine-btn id-engine-btn-secondary" style="width: 100%; font-size: 0.75rem;" id="id-prop-launch-photo-studio">
+            📷 Crop &amp; Adjust Photo Studio
+          </button>
+        </div>
       `;
     }
 
@@ -1995,6 +2067,14 @@ class IDCardEngine {
           el.maskShape = e.target.value;
           this.updateElementVisual(el);
           if (this.onChange) this.onChange(this);
+        });
+      }
+      const photoStudioBtn = this.target.querySelector("#id-prop-launch-photo-studio");
+      if (photoStudioBtn) {
+        photoStudioBtn.addEventListener("click", () => {
+          if (typeof window.openPhotoStudio === "function") {
+            window.openPhotoStudio('camera');
+          }
         });
       }
     }
@@ -2156,15 +2236,17 @@ class IDCardEngine {
   // Helper method: Compile a single card side HTML from database record and layout schema
   compileCardSideHTML(side, cardHolderData, layoutSchema) {
     const schema = layoutSchema || this.layout;
-    const bgInfo = schema.backgrounds[side];
+    const bgInfo = schema.backgrounds ? schema.backgrounds[side] : null;
     let bgCSS = '';
-    if (bgInfo.type === 'image') {
-      bgCSS = `background-image: url(${bgInfo.value});`;
-    } else {
-      if (bgInfo.value.includes('gradient')) {
-        bgCSS = `background: ${bgInfo.value};`;
+    if (bgInfo) {
+      if (bgInfo.type === 'image') {
+        bgCSS = `background-image: url(${bgInfo.value});`;
       } else {
-        bgCSS = `background-color: ${bgInfo.value};`;
+        if (bgInfo.value && bgInfo.value.includes('gradient')) {
+          bgCSS = `background: ${bgInfo.value};`;
+        } else if (bgInfo.value) {
+          bgCSS = `background-color: ${bgInfo.value};`;
+        }
       }
     }
 
@@ -2358,9 +2440,9 @@ class IDCardBridge {
   initDetection() {
     const checkRoute = () => {
       // Allow detection via URL hash, path, or a simulated query param
-      const urlMatches = this.printPagePattern.test(window.location.href) || 
-                          this.printPagePattern.test(window.location.hash) ||
-                          (document.body && document.body.classList.contains('id-page-2'));
+      const urlMatches = this.printPagePattern.test(window.location.href) ||
+        this.printPagePattern.test(window.location.hash) ||
+        (document.body && document.body.classList.contains('id-page-2'));
       if (urlMatches) {
         this.activateBridge();
       } else {
@@ -2371,7 +2453,7 @@ class IDCardBridge {
     window.addEventListener('popstate', checkRoute);
     window.addEventListener('hashchange', checkRoute);
     window.addEventListener('load', checkRoute);
-    
+
     // Also support manual state toggle events
     window.addEventListener('idcardengine:pagechange', (e) => {
       if (e.detail && e.detail.page === 2) {
@@ -2468,7 +2550,7 @@ class IDCardBridge {
   // Maps database fields to the structure expected by the template elements
   mapDatabaseToCardHolder(dbRecord) {
     const cardData = {};
-    
+
     // Mapped standard values
     cardData.id = dbRecord.id_number || dbRecord.id || "";
     cardData.name = `${dbRecord.first_name || ''} ${dbRecord.last_name || ''}`.trim() || dbRecord.name || "";
@@ -2496,7 +2578,7 @@ class IDCardBridge {
       container = document.createElement('div');
       container.id = this.targetSelector.replace('#', '');
       container.className = 'id-preview-panel-container';
-      
+
       // Look for a suitable injection parent in host system, default to main/body
       const parent = document.querySelector('#id-bridge-mount-point') || document.querySelector('main') || document.body;
       parent.appendChild(container);
@@ -2530,7 +2612,7 @@ class IDCardBridge {
     this.currentRecords = records;
     const grid = document.getElementById('id-preview-cards-grid');
     const printBtn = document.getElementById('id-btn-batch-print');
-    
+
     if (!grid) return;
 
     if (!records || records.length === 0) {
@@ -2683,7 +2765,7 @@ class IDCardBridge {
     const overlay = document.createElement("div");
     overlay.id = "id-batch-print-overlay";
     overlay.className = "id-engine-print-preview-overlay";
-    
+
     let cardsHTML = "";
     this.currentRecords.forEach(rec => {
       const cardData = this.mapDatabaseToCardHolder(rec);
@@ -2722,4 +2804,3 @@ class IDCardBridge {
     });
   }
 }
-
